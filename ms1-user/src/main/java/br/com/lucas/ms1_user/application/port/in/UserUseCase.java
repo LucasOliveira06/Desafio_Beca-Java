@@ -14,5 +14,8 @@ public interface UserUseCase {
     User update(Long id, User user);
 
     void delete(Long id);
+
+    List<User> importCsv(String content);
+
 }
 

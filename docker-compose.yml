@@ -33,6 +33,23 @@ services:
       timeout: 5s
       retries: 5
 
+  ms1-user:
+    build:
+      context: ./ms1-user
+      dockerfile: Dockerfile
+    container_name: ms1-user
+    ports:
+      - "8081:8081"
+    environment:
+      SERVER_PORT: 8081
+      USER_DB_NAME: ${USER_DB_NAME}
+      USER_DB_USER: ${USER_DB_USER}
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://user-db:5432/${USER_DB_NAME}
+    depends_on:
+      user-db:
+        condition: service_healthy
+
 volumes:
   user-db-data:
   transaction-db-data:

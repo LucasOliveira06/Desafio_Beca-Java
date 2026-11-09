@@ -42,11 +42,24 @@ public class UserPersistenceAdapter implements UserRepositoryPort {
         jpaRepository.deleteById(id);
     }
 
+
+    @Override
+    public boolean existsByEmail(String email) {
+        return jpaRepository.existsByEmail(email);
+    }
+
+    @Override
+    public Optional<User> findByEmail(String email) {
+        return jpaRepository.findByEmail(email)
+                .map(this::toDomain);
+    }
+
     private UserEntity toEntity(User user) {
         UserEntity entity = new UserEntity();
         entity.setId(user.getId());
         entity.setName(user.getName());
         entity.setEmail(user.getEmail());
+        entity.setPassword(user.getPassword());
         return entity;
     }
 
@@ -54,7 +67,9 @@ public class UserPersistenceAdapter implements UserRepositoryPort {
         return new User(
                 entity.getId(),
                 entity.getName(),
-                entity.getEmail()
+                entity.getEmail(),
+                entity.getPassword()
         );
     }
+
 }

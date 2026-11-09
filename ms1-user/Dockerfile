@@ -1,0 +1,20 @@
+# Etapa 1: compilar o projeto
+FROM maven:3-eclipse-temurin-21-noble AS build
+
+WORKDIR /app
+
+COPY pom.xml .
+COPY src ./src
+
+RUN mvn clean package -DskipTests
+
+# Etapa 2: executar a aplicação
+FROM eclipse-temurin:21-jre-noble
+
+WORKDIR /app
+
+COPY --from=build /app/target/*.jar app.jar
+
+EXPOSE 8081
+
+ENTRYPOINT ["java", "-jar", "app.jar"]

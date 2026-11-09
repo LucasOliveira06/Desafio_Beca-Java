@@ -1,4 +1,3 @@
-
 package br.com.lucas.ms1_user.application.port.out;
 
 import br.com.lucas.ms1_user.domain.model.User;
@@ -14,5 +13,11 @@ public interface UserRepositoryPort {
     Optional<User> findById(Long id);
 
     void deleteById(Long id);
+
+    boolean existsByEmail(String email);
+
+    Optional<User> findByEmail(String email);
+
 }
+
 
