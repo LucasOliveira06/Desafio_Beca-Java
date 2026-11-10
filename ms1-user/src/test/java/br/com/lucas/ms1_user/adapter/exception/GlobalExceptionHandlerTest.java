@@ -174,19 +174,28 @@ class GlobalExceptionHandlerTest {
         MaxUploadSizeExceededException exception =
                 new MaxUploadSizeExceededException(1024L * 1024);
 
-        ResponseEntity<Map<String, String>> response =
-                handler.handleMaxUploadSize(exception);
+        ResponseEntity<Object> response =
+                handler.handleMaxUploadSizeExceededException(
+                        exception,
+                        new HttpHeaders(),
+                        HttpStatus.PAYLOAD_TOO_LARGE,
+                        new ServletWebRequest(
+                                new MockHttpServletRequest()
+                        )
+                );
 
         assertEquals(
                 HttpStatus.PAYLOAD_TOO_LARGE,
                 response.getStatusCode()
         );
 
-        assertNotNull(response.getBody());
+        assertInstanceOf(Map.class, response.getBody());
+
+        Map<?, ?> error = (Map<?, ?>) response.getBody();
 
         assertEquals(
                 "O arquivo enviado excede o limite permitido de 1 MB",
-                response.getBody().get("message")
+                error.get("message")
         );
     }
 

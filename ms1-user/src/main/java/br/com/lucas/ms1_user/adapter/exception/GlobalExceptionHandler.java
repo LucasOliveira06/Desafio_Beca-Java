@@ -94,9 +94,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .body(error);
     }
 
-    @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ResponseEntity<Map<String, String>> handleMaxUploadSize(
-            MaxUploadSizeExceededException exception) {
+    @Override
+    protected ResponseEntity<Object> handleMaxUploadSizeExceededException(
+            MaxUploadSizeExceededException exception,
+            HttpHeaders headers,
+            HttpStatusCode status,
+            WebRequest request) {
 
         Map<String, String> error = new HashMap<>();
 
@@ -106,7 +109,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         );
 
         return ResponseEntity
-                .status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .status(status)
                 .body(error);
     }
 
