@@ -1,659 +1,198 @@
-# \# Desafio Beca Java — API de Gestão Financeira
+# Desafio Beca Java — API de Gestão Financeira
 
-# 
+Projeto desenvolvido para o Desafio Beca Java 2026, utilizando Java, Spring Boot e arquitetura hexagonal.
 
-# Projeto desenvolvido como parte do \*\*Desafio Beca Java\*\*, com o objetivo de construir uma API de gestão financeira utilizando Java, Spring Boot, microsserviços e arquitetura hexagonal.
+Este repositório contém o **MS1 — User Service**, responsável pelo gerenciamento e autenticação de usuários. O MS2, voltado às transações financeiras, será desenvolvido em uma etapa separada.
 
-# 
+## Tecnologias
 
-# Este repositório está organizado em microsserviços. A primeira etapa implementada é o \*\*MS1 — Gerenciamento de Usuários\*\*.
+- Java 21 e Spring Boot 4.1.2
+- Spring Web, Spring Data JPA e Spring Security
+- Bean Validation e BCrypt
+- PostgreSQL 16 e Flyway
+- Maven, JUnit 5, Mockito e JaCoCo
+- Swagger / OpenAPI
+- Docker e Docker Compose
 
-# 
+## Funcionalidades
 
-# \## MS1 — Gerenciamento de Usuários
+- Cadastro, listagem, consulta, atualização e exclusão de usuários
+- Normalização e unicidade do e-mail, com tratamento de duplicidade
+- Senhas protegidas por BCrypt e autenticação HTTP Basic
+- Respostas sem exposição da senha ou do hash
+- Atualização e exclusão permitidas apenas ao proprietário da conta
+- Importação parcial de usuários por CSV, com relatório de erros por linha
+- Validação de dados e tratamento centralizado de erros HTTP
+- Migrações do banco, documentação Swagger e testes automatizados
 
-# 
+## Arquitetura
 
-# O MS1 é responsável pelo cadastro e gerenciamento de usuários, oferecendo operações CRUD, autenticação HTTP Basic e importação de usuários por arquivo CSV.
+O MS1 segue uma arquitetura hexagonal simples (**Ports and Adapters**), separando as regras da aplicação das tecnologias externas.
 
-# 
+```text
+ms1-user/
+└── src/main/java/br/com/lucas/ms1_user/
+    ├── domain/
+    │   ├── model/             # Usuário e linha do CSV
+    │   └── exception/         # Exceções de negócio
+    ├── application/
+    │   ├── dto/               # Resultado da importação
+    │   ├── port/in/           # Casos de uso
+    │   ├── port/out/          # Interfaces de saída
+    │   ├── service/           # Regras de negócio
+    │   └── validation/        # Validação dos usuários
+    └── adapter/
+        ├── controller/        # Endpoints e DTOs HTTP
+        ├── csv/               # Leitura do CSV
+        ├── exception/         # Tratamento de erros
+        ├── persistence/       # JPA e PostgreSQL
+        └── security/          # HTTP Basic e BCrypt
+```
 
-# \### Funcionalidades implementadas
+O fluxo principal é: **requisição HTTP → controller → caso de uso → serviço → porta de saída → adaptador JPA → PostgreSQL**.
 
-# 
+As alterações do banco são versionadas pelo Flyway em `ms1-user/src/main/resources/db/migration/` (V1, V2 e V3). O Hibernate utiliza `ddl-auto=validate`.
 
-# \- Cadastro de usuários.
+## Configuração e execução
 
-# \- Listagem de usuários.
+**Pré-requisitos:** Git e Docker Desktop com Docker Compose. Para executar os testes localmente, utilize Java 21 e o Maven Wrapper incluído no projeto.
 
-# \- Consulta de usuário por ID.
+Na raiz do repositório, copie o arquivo de exemplo e configure as variáveis do ambiente:
 
-# \- Atualização de usuários.
+```powershell
+Copy-Item .env.example .env
+```
 
-# \- Exclusão de usuários.
+O `.env` contém as configurações dos bancos (`USER_DB_*` e `TRANSACTION_DB_*`). **Não envie esse arquivo ao GitHub.**
 
-# \- Validação de nome, e-mail e senha.
+Para construir e iniciar a API e seu PostgreSQL:
 
-# \- Normalização e unicidade de e-mail.
+```powershell
+docker compose up --build -d ms1-user
+```
 
-# \- Criptografia de senhas com BCrypt.
+Para verificar os containers e acompanhar os logs:
 
-# \- Autenticação utilizando HTTP Basic.
+```powershell
+docker compose ps
+docker compose logs -f ms1-user
+```
 
-# \- Respostas da API sem exposição da senha.
+Com a aplicação iniciada:
 
-# \- Importação de usuários por CSV com transação.
+| Recurso | Endereço |
+|---|---|
+| API de usuários | http://localhost:8081/users |
+| Swagger UI | http://localhost:8081/swagger-ui/index.html |
+| OpenAPI JSON | http://localhost:8081/v3/api-docs |
+| Health check | http://localhost:8081/actuator/health |
 
-# \- Tratamento de erros HTTP.
+O PostgreSQL do MS1 utiliza a porta interna `5432`. No ambiente local, a porta exposta é definida por `USER_DB_PORT` (por exemplo, `5434`). Os dados são persistidos em um volume Docker.
 
-# \- Versionamento do banco com Flyway.
+Para parar os serviços sem remover os volumes, utilize `docker compose down`. Evite `docker compose down -v` se quiser preservar os dados cadastrados.
 
-# \- Documentação interativa com Swagger/OpenAPI.
+## Endpoints e autenticação
 
-# \- Testes automatizados com JUnit e Mockito.
+| Método | Endpoint | Descrição | Autenticação |
+|---|---|---|---|
+| POST | `/users` | Cadastrar usuário | Pública |
+| GET | `/users` | Listar usuários | HTTP Basic |
+| GET | `/users/{id}` | Consultar por ID | HTTP Basic |
+| PUT | `/users/{id}` | Atualizar a própria conta | HTTP Basic + proprietário |
+| DELETE | `/users/{id}` | Excluir a própria conta | HTTP Basic + proprietário |
+| POST | `/users/import` | Importar usuários por CSV | HTTP Basic |
 
-# \- Relatório de cobertura com JaCoCo.
+No HTTP Basic, o **usuário é o e-mail cadastrado** e a **senha é a informada no cadastro**. No Swagger, o botão `Authorize` permite informar essas credenciais.
 
-# \- Execução da aplicação com Docker Compose.
+Exemplo de cadastro (`POST /users`):
 
-# 
+```json
+{
+  "name": "Ana Silva",
+  "email": "ana@example.com",
+  "password": "SenhaAna123"
+}
+```
 
-# \## Tecnologias utilizadas
+O cadastro retorna **201 Created**, com o header `Location` apontando para `/users/{id}`. A resposta contém ID, nome e e-mail, sem a senha.
 
-# 
+## Importação CSV
 
-# \- Java 21
+O endpoint `POST /users/import` recebe um arquivo `multipart/form-data` no campo **`file`**, com o cabeçalho exato `name,email,password`.
 
-# \- Spring Boot 4.1.2
+```csv
+name,email,password
+Ana Silva,ana@example.com,SenhaAna123
+Pedro Souza,pedro@example.com,123
+Maria Oliveira,maria@example.com,SenhaMaria123
+```
 
-# \- Spring Web
+A importação é **parcial**: linhas válidas são cadastradas, enquanto as inválidas são ignoradas e registradas com número da linha e motivo. Uma falha em uma linha não desfaz os cadastros válidos já realizados.
 
-# \- Spring Data JPA
+Exemplo de resposta (`200 OK`):
 
-# \- Spring Security
+```json
+{
+  "totalImported": 2,
+  "errors": [
+    {
+      "line": 3,
+      "reason": "A senha deve ter no mínimo 8 caracteres"
+    }
+  ]
+}
+```
 
-# \- Bean Validation
+Regras de importação:
 
-# \- PostgreSQL 16
+- Máximo de **1 MB por arquivo** e **1.000 linhas de dados não vazias** (sem contar o cabeçalho).
+- Linhas com formato incorreto, dados inválidos ou e-mails duplicados são registradas no relatório.
+- Cabeçalho inválido e limite de linhas excedido provocam rejeição do arquivo com HTTP `400`.
+- Upload acima do limite do Spring pode retornar HTTP `413`.
 
-# \- Flyway
+## Tratamento de erros
 
-# \- Maven
+A API possui um `GlobalExceptionHandler` para padronizar as respostas.
 
-# \- Docker e Docker Compose
+| Status | Situação |
+|---|---|
+| `400 Bad Request` | Dados inválidos ou arquivo CSV incorreto |
+| `401 Unauthorized` | Autenticação ausente ou inválida |
+| `403 Forbidden` | Tentativa de alterar ou excluir conta de outra pessoa |
+| `404 Not Found` | Usuário não encontrado |
+| `409 Conflict` | E-mail duplicado ou violação de integridade |
+| `413 Payload Too Large` | Upload acima do limite permitido |
+| `500 Internal Server Error` | Falha inesperada, sem expor detalhes internos |
 
-# \- Swagger / OpenAPI
+## Testes e cobertura
 
-# \- JUnit 5
+Os testes utilizam **JUnit 5** e **Mockito** para verificar cadastro, atualização, validação, leitura e importação parcial do CSV, persistência, controller, autorização e tratamento de erros.
 
-# \- Mockito
+Para executar a suíte completa no Windows, entre na pasta `ms1-user`:
 
-# \- JaCoCo
+```powershell
+cd ms1-user
+```
 
-# 
+Como o Maven executado no terminal não lê automaticamente o `.env`, carregue as variáveis na sessão do PowerShell:
 
-# \## Arquitetura
+```powershell
+Get-Content ..\.env | ForEach-Object {
+    if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+        [Environment]::SetEnvironmentVariable($matches[1], $matches[2].Trim(), "Process")
+    }
+}
+```
 
-# 
+Execute os testes e gere o relatório JaCoCo:
 
-# O MS1 utiliza \*\*arquitetura hexagonal (Ports and Adapters)\*\* para separar as regras de negócio da infraestrutura.
+```powershell
+.\mvnw.cmd clean verify
+Invoke-Item .\target\site\jacoco\index.html
+```
 
-# 
+## Status do projeto
 
-# A estrutura principal é:
+**MS1 — Gerenciamento de Usuários:** CRUD, segurança, importação parcial de CSV, Flyway, Swagger, Docker e testes implementados.
 
-# 
-
-# ```text
-
-# ms1-user/
-
-# ├── src/
-
-# │   ├── main/
-
-# │   │   ├── java/br/com/lucas/ms1\_user/
-
-# │   │   │   ├── adapter/
-
-# │   │   │   │   ├── controller/
-
-# │   │   │   │   ├── csv/
-
-# │   │   │   │   ├── exception/
-
-# │   │   │   │   ├── persistence/
-
-# │   │   │   │   └── security/
-
-# │   │   │   ├── application/
-
-# │   │   │   │   ├── port/
-
-# │   │   │   │   ├── service/
-
-# │   │   │   │   └── validation/
-
-# │   │   │   └── domain/
-
-# │   │   └── resources/
-
-# │   │       └── db/migration/
-
-# │   └── test/
-
-# ├── Dockerfile
-
-# └── pom.xml
-
-# ```
-
-# 
-
-# \*\*Responsabilidades das camadas:\*\*
-
-# 
-
-# \- \*\*Domain:\*\* modelos e exceções de negócio.
-
-# \- \*\*Application:\*\* casos de uso, serviços, validações e portas.
-
-# \- \*\*Adapters:\*\* comunicação HTTP, persistência, segurança e leitura de CSV.
-
-# \- \*\*Infrastructure:\*\* configuração de banco, Docker e bibliotecas externas.
-
-# 
-
-# \## Pré-requisitos
-
-# 
-
-# Para executar o projeto, é necessário ter:
-
-# 
-
-# \- Git
-
-# \- Docker Desktop com Docker Compose
-
-# \- Java 21 e Maven, caso queira executar a aplicação localmente
-
-# 
-
-# O projeto também possui Maven Wrapper, permitindo executar os comandos Maven sem instalar o Maven separadamente.
-
-# 
-
-# \## Configuração do ambiente
-
-# 
-
-# Na raiz do repositório, existe um arquivo `.env.example` com as variáveis de configuração.
-
-# 
-
-# Crie um arquivo `.env` a partir dele e preencha os valores necessários.
-
-# 
-
-# Exemplo no PowerShell:
-
-# 
-
-# ```powershell
-
-# Copy-Item .env.example .env
-
-# ```
-
-# 
-
-# As variáveis utilizadas pelo ambiente Docker incluem:
-
-# 
-
-# ```text
-
-# USER\_DB\_NAME
-
-# USER\_DB\_USER
-
-# USER\_DB\_PASSWORD
-
-# USER\_DB\_PORT
-
-# 
-
-# TRANSACTION\_DB\_NAME
-
-# TRANSACTION\_DB\_USER
-
-# TRANSACTION\_DB\_PASSWORD
-
-# TRANSACTION\_DB\_PORT
-
-# ```
-
-# 
-
-# \*\*Importante:\*\* o arquivo `.env` contém configurações sensíveis e não deve ser enviado ao GitHub.
-
-# 
-
-# \## Executando com Docker Compose
-
-# 
-
-# Na raiz do repositório, execute:
-
-# 
-
-# ```powershell
-
-# docker compose up --build -d ms1-user
-
-# ```
-
-# 
-
-# Esse comando constrói a imagem da aplicação e inicia o MS1 e o banco PostgreSQL necessário.
-
-# 
-
-# Para verificar os containers:
-
-# 
-
-# ```powershell
-
-# docker compose ps
-
-# ```
-
-# 
-
-# Para consultar os logs:
-
-# 
-
-# ```powershell
-
-# docker compose logs -f ms1-user
-
-# ```
-
-# 
-
-# \*\*Observação:\*\* no ambiente utilizado durante o desenvolvimento, o banco já pertencia ao projeto Compose `desafio\\\_beca-`. Para reutilizar esse ambiente existente, foi utilizado:
-
-# 
-
-# ```powershell
-
-# docker compose -p desafio\_beca- up --build -d ms1-user
-
-# ```
-
-# 
-
-# Não utilize `docker compose down -v` se precisar preservar os dados armazenados nos volumes PostgreSQL.
-
-# 
-
-# \## Acessando a aplicação
-
-# 
-
-# Com o MS1 iniciado, os principais endereços são:
-
-# 
-
-# | Recurso | URL |
-
-# |---|---|
-
-# | API de usuários | http://localhost:8081/users |
-
-# | Swagger UI | http://localhost:8081/swagger-ui/index.html |
-
-# | OpenAPI JSON | http://localhost:8081/v3/api-docs |
-
-# | Health check | http://localhost:8081/actuator/health |
-
-# 
-
-# \## Endpoints do MS1
-
-# 
-
-# | Método | Endpoint | Descrição | Autenticação |
-
-# |---|---|---|---|
-
-# | POST | `/users` | Cadastrar usuário | Pública |
-
-# | GET | `/users` | Listar usuários | HTTP Basic |
-
-# | GET | `/users/{id}` | Buscar usuário por ID | HTTP Basic |
-
-# | PUT | `/users/{id}` | Atualizar usuário | HTTP Basic |
-
-# | DELETE | `/users/{id}` | Excluir usuário | HTTP Basic |
-
-# | POST | `/users/import` | Importar usuários por CSV | HTTP Basic |
-
-# 
-
-# \### Exemplo de cadastro
-
-# 
-
-# \*\*POST `/users`\*\*
-
-# 
-
-# ```json
-
-# {
-
-# &#x20; "name": "Ana Silva",
-
-# &#x20; "email": "ana@exemplo.com",
-
-# &#x20; "password": "Senha123"
-
-# }
-
-# ```
-
-# 
-
-# Em caso de sucesso, a API retorna `201 Created`, incluindo o header `Location`.
-
-# 
-
-# Exemplo de resposta:
-
-# 
-
-# ```json
-
-# {
-
-# &#x20; "id": 1,
-
-# &#x20; "name": "Ana Silva",
-
-# &#x20; "email": "ana@exemplo.com"
-
-# }
-
-# ```
-
-# 
-
-# Por segurança, o campo `password` não é retornado.
-
-# 
-
-# \### Autenticação
-
-# 
-
-# O MS1 utiliza autenticação \*\*HTTP Basic\*\*.
-
-# 
-
-# Após cadastrar um usuário, utilize:
-
-# 
-
-# \- \*\*Username:\*\* e-mail cadastrado.
-
-# \- \*\*Password:\*\* senha informada durante o cadastro.
-
-# 
-
-# No Swagger, clique em \*\*Authorize\*\* para informar as credenciais antes de executar endpoints protegidos.
-
-# 
-
-# As senhas são armazenadas no banco utilizando BCrypt, e não em texto puro.
-
-# 
-
-# \## Importação de usuários por CSV
-
-# 
-
-# O endpoint `POST /users/import` recebe um arquivo enviado como `multipart/form-data`.
-
-# 
-
-# O nome do campo deve ser `file`.
-
-# 
-
-# O arquivo deve conter o cabeçalho:
-
-# 
-
-# ```csv
-
-# name,email,password
-
-# ```
-
-# 
-
-# Exemplo:
-
-# 
-
-# ```csv
-
-# name,email,password
-
-# Ana Silva,ana@exemplo.com,SenhaAna123
-
-# Carlos Souza,carlos@exemplo.com,SenhaCarlos123
-
-# Maria Oliveira,maria@exemplo.com,SenhaMaria123
-
-# ```
-
-# 
-
-# A importação valida os dados antes de cadastrar os usuários.
-
-# 
-
-# A operação é transacional: se ocorrer um erro durante a importação, os cadastros realizados naquela transação são revertidos.
-
-# 
-
-# \## Tratamento de erros
-
-# 
-
-# A aplicação utiliza um tratamento centralizado de exceções.
-
-# 
-
-# | Status | Significado |
-
-# |---|---|
-
-# | `200 OK` | Operação realizada com sucesso |
-
-# | `201 Created` | Usuário criado |
-
-# | `204 No Content` | Usuário excluído |
-
-# | `400 Bad Request` | Dados inválidos ou CSV incorreto |
-
-# | `401 Unauthorized` | Autenticação ausente ou inválida |
-
-# | `404 Not Found` | Usuário não encontrado |
-
-# | `409 Conflict` | E-mail já cadastrado |
-
-# 
-
-# \## Migrações do banco de dados
-
-# 
-
-# O projeto utiliza \*\*Flyway\*\* para versionamento do esquema PostgreSQL.
-
-# 
-
-# As migrações do MS1 ficam em:
-
-# 
-
-# `ms1-user/src/main/resources/db/migration/`
-
-# 
-
-# Migrações implementadas:
-
-# 
-
-# \- `V1\\\_\\\_create\\\_users\\\_table.sql`
-
-# \- `V2\\\_\\\_normalize\\\_and\\\_unique\\\_email.sql`
-
-# \- `V3\\\_\\\_add\\\_password\\\_to\\\_users.sql`
-
-# 
-
-# O Flyway aplica as migrações pendentes durante a inicialização da aplicação.
-
-# 
-
-# \## Testes automatizados
-
-# 
-
-# Os testes do MS1 utilizam \*\*JUnit 5\*\* e \*\*Mockito\*\*.
-
-# 
-
-# Foram implementados testes para as regras de negócio, validação de usuários, leitura de CSV, persistência, controller e tratamento de exceções.
-
-# 
-
-# \### Executar os testes e gerar o relatório
-
-# 
-
-# No Windows, acesse a pasta do MS1:
-
-# 
-
-# ```powershell
-
-# cd ms1-user
-
-# ```
-
-# 
-
-# Para executar o Maven localmente, carregue as variáveis do arquivo `.env` da raiz na sessão atual do PowerShell:
-
-# 
-
-# ```powershell
-
-# Get-Content ..\\.env | ForEach-Object {
-
-# &#x20;   if ($\_ -match '^\\s\*(\[A-Za-z\_]\[A-Za-z0-9\_]\*)=(.\*)$') {
-
-# &#x20;       \[Environment]::SetEnvironmentVariable(
-
-# &#x20;           $matches\[1],
-
-# &#x20;           $matches\[2].Trim(),
-
-# &#x20;           "Process"
-
-# &#x20;       )
-
-# &#x20;   }
-
-# }
-
-# ```
-
-# 
-
-# Em seguida:
-
-# 
-
-# ```powershell
-
-# .\\mvnw.cmd clean verify
-
-# ```
-
-# 
-
-# O Maven executará os testes e o JaCoCo gerará o relatório de cobertura.
-
-# 
-
-# Para abrir o relatório:
-
-# 
-
-# ```powershell
-
-# Invoke-Item .\\target\\site\\jacoco\\index.html
-
-# ```
-
-# 
-
-# \*\*Última cobertura observada durante o desenvolvimento:\*\* aproximadamente \*\*86% das instruções\*\*.
-
-# 
-
-# \## Segurança e boas práticas
-
-# 
-
-# O MS1 utiliza:
-
-# 
-
-# \- Hash de senhas com BCrypt.
-
-# \- HTTP Basic para endpoints protegidos.
-
-# \- DTO de resposta sem o campo de senha.
-
-# \- E-mail normalizado e único.
-
-# \- Bean Validation nas entradas da API.
-
-# \- Variáveis de ambiente para configurações sensíveis.
-
-# \- Migrações versionadas com Flyway.
-
-# \- Transações para importação CSV.
-
-# 
-
-# \## Status do projeto
-
-# 
-
-# \*\*MS1 — Gerenciamento de Usuários:\*\* implementação funcional concluída, incluindo CRUD, segurança, importação CSV, documentação Swagger, testes e execução com Docker.
-
-# 
-
-# \*\*MS2 — Transações:\*\* etapa separada do desafio, a ser desenvolvida posteriormente.
-
-
+**MS2 — Transações Financeiras:** próxima etapa do desafio.

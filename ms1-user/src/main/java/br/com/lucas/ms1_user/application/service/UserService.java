@@ -7,13 +7,17 @@ import br.com.lucas.ms1_user.domain.model.User;
 import br.com.lucas.ms1_user.domain.exception.UserNotFoundException;
 import br.com.lucas.ms1_user.domain.exception.EmailAlreadyExistsException;
 import br.com.lucas.ms1_user.application.port.out.CsvUserReaderPort;
-import org.springframework.transaction.annotation.Transactional;
 import br.com.lucas.ms1_user.application.validation.UserValidator;
+import br.com.lucas.ms1_user.application.dto.CsvImportError;
+import br.com.lucas.ms1_user.application.dto.CsvImportResult;
+import br.com.lucas.ms1_user.domain.model.CsvUserRow;
 
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.ArrayList;
 
 @Service
 public class UserService implements UserUseCase {
@@ -90,23 +94,61 @@ public class UserService implements UserUseCase {
     }
 
     @Override
-    @Transactional
-    public List<User> importCsv(String content) {
+    public CsvImportResult importCsv(String content) {
 
-        List<User> users = csvUserReader.parse(content);
+        List<CsvUserRow> rows = csvUserReader.parse(content);
 
-        // Valida todos os usuários antes de salvar
-        for (User user : users) {
-            userValidator.validate(user);
+        List<CsvImportError> errors = new ArrayList<>();
+
+        int totalImported = 0;
+
+        for (CsvUserRow row : rows) {
+
+            // Linha com formato inválido
+            if (row.error() != null) {
+                errors.add(new CsvImportError(
+                        row.lineNumber(),
+                        row.error()
+                ));
+                continue;
+            }
+
+            try {
+                // Valida apenas o usuário da linha atual
+                userValidator.validate(row.user());
+
+                // Salva o usuário válido
+                create(row.user());
+
+                totalImported++;
+
+            } catch (EmailAlreadyExistsException exception) {
+
+                errors.add(new CsvImportError(
+                        row.lineNumber(),
+                        "E-mail já cadastrado"
+                ));
+
+            } catch (IllegalArgumentException exception) {
+
+                errors.add(new CsvImportError(
+                        row.lineNumber(),
+                        exception.getMessage()
+                ));
+
+            } catch (DataIntegrityViolationException exception) {
+
+                errors.add(new CsvImportError(
+                        row.lineNumber(),
+                        "Conflito de dados ao salvar usuário"
+                ));
+            }
         }
 
-        List<User> importedUsers = new java.util.ArrayList<>();
-
-        for (User user : users) {
-            importedUsers.add(create(user));
-        }
-
-        return importedUsers;
+        return new CsvImportResult(
+                totalImported,
+                errors
+        );
     }
 
 }

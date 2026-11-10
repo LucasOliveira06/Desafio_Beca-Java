@@ -2,6 +2,7 @@ package br.com.lucas.ms1_user.adapter.controller;
 
 import br.com.lucas.ms1_user.adapter.controller.dto.UserRequestDTO;
 import br.com.lucas.ms1_user.adapter.controller.dto.UserResponseDTO;
+import br.com.lucas.ms1_user.application.dto.CsvImportResult;
 import br.com.lucas.ms1_user.application.port.in.UserUseCase;
 import br.com.lucas.ms1_user.domain.model.User;
 
@@ -17,12 +18,14 @@ import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.security.Principal;
 import java.util.List;
 
 @RestController
@@ -37,6 +40,8 @@ import java.util.List;
         scheme = "basic"
 )
 public class UserController {
+
+    private static final long MAX_CSV_BYTES = 1024 * 1024;
 
     private final UserUseCase userUseCase;
 
@@ -139,7 +144,7 @@ public class UserController {
 
     @Operation(
             summary = "Atualizar usuário",
-            description = "Atualiza o nome, e-mail e senha de um usuário existente"
+            description = "Atualiza o nome, e-mail e senha da própria conta"
     )
     @SecurityRequirement(name = "basicAuth")
     @ApiResponses({
@@ -156,6 +161,10 @@ public class UserController {
                     description = "Usuário não autenticado"
             ),
             @ApiResponse(
+                    responseCode = "403",
+                    description = "Usuário não tem permissão para atualizar outra conta"
+            ),
+            @ApiResponse(
                     responseCode = "404",
                     description = "Usuário não encontrado"
             ),
@@ -167,7 +176,11 @@ public class UserController {
     @PutMapping("/{id}")
     public UserResponseDTO update(
             @PathVariable Long id,
-            @Valid @RequestBody UserRequestDTO request) {
+            @Valid @RequestBody UserRequestDTO request,
+            Principal principal) {
+
+        // Confere se o usuário autenticado é o dono da conta
+        validateOwner(id, principal);
 
         User user = new User(
                 id,
@@ -184,7 +197,7 @@ public class UserController {
 
     @Operation(
             summary = "Excluir usuário",
-            description = "Exclui um usuário cadastrado pelo ID"
+            description = "Exclui a própria conta pelo ID"
     )
     @SecurityRequirement(name = "basicAuth")
     @ApiResponses({
@@ -197,13 +210,22 @@ public class UserController {
                     description = "Usuário não autenticado"
             ),
             @ApiResponse(
+                    responseCode = "403",
+                    description = "Usuário não tem permissão para excluir outra conta"
+            ),
+            @ApiResponse(
                     responseCode = "404",
                     description = "Usuário não encontrado"
             )
     })
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
+    public void delete(
+            @PathVariable Long id,
+            Principal principal) {
+
+
+        validateOwner(id, principal);
 
         userUseCase.delete(id);
     }
@@ -211,32 +233,33 @@ public class UserController {
 
     @Operation(
             summary = "Importar usuários por CSV",
-            description = "Importa usuários a partir de um arquivo CSV com as colunas name,email,password. A importação é transacional."
+            description = "Importa as linhas válidas de um CSV com as colunas " +
+                    "name,email,password e retorna um relatório dos erros encontrados."
     )
     @SecurityRequirement(name = "basicAuth")
     @ApiResponses({
             @ApiResponse(
                     responseCode = "200",
-                    description = "Usuários importados com sucesso"
+                    description = "Importação processada; consulte o resumo e os erros por linha"
             ),
             @ApiResponse(
                     responseCode = "400",
-                    description = "Arquivo CSV inválido ou dados incorretos"
+                    description = "Arquivo CSV inválido ou limite de linhas excedido"
             ),
             @ApiResponse(
                     responseCode = "401",
                     description = "Usuário não autenticado"
             ),
             @ApiResponse(
-                    responseCode = "409",
-                    description = "E-mail já cadastrado"
+                    responseCode = "413",
+                    description = "Arquivo excede o limite de upload"
             )
     })
     @PostMapping(
             value = "/import",
             consumes = "multipart/form-data"
     )
-    public List<UserResponseDTO> importCsv(
+    public CsvImportResult importCsv(
             @RequestPart("file") MultipartFile file) throws IOException {
 
         if (file.isEmpty()) {
@@ -245,17 +268,34 @@ public class UserController {
             );
         }
 
+        if (file.getSize() > MAX_CSV_BYTES) {
+            throw new IllegalArgumentException(
+                    "O arquivo CSV deve ter no máximo 1 MB"
+            );
+        }
+
         String content = new String(
                 file.getBytes(),
                 StandardCharsets.UTF_8
         );
 
-        return userUseCase.importCsv(content)
-                .stream()
-                .map(this::toResponseDTO)
-                .toList();
+        return userUseCase.importCsv(content);
     }
 
+    // VERIFICAR SE O USUÁRIO É DONO DA CONTA
+
+    private void validateOwner(Long id, Principal principal) {
+
+        if (principal == null) {
+            throw new AccessDeniedException("Acesso negado");
+        }
+
+        User user = userUseCase.findById(id);
+
+        if (!user.getEmail().equalsIgnoreCase(principal.getName())) {
+            throw new AccessDeniedException("Acesso negado");
+        }
+    }
 
     private UserResponseDTO toResponseDTO(User user) {
 

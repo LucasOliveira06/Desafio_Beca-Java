@@ -9,6 +9,9 @@ import org.springframework.validation.BindingResult;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.util.Map;
 
@@ -126,6 +129,100 @@ class GlobalExceptionHandlerTest {
         assertEquals(
                 "E-mail inválido",
                 response.getBody().get("email")
+        );
+    }
+
+    @Test
+    void deveRetornar409QuandoHouverViolacaoDeIntegridade() {
+
+        DataIntegrityViolationException exception =
+                new DataIntegrityViolationException(
+                        "Violação da constraint de e-mail único"
+                );
+
+        ResponseEntity<Map<String, String>> response =
+                handler.handleDataIntegrity(exception);
+
+        assertEquals(
+                HttpStatus.CONFLICT,
+                response.getStatusCode()
+        );
+
+        assertNotNull(response.getBody());
+
+        assertEquals(
+                "Conflito de integridade dos dados",
+                response.getBody().get("message")
+        );
+    }
+
+    @Test
+    void deveRetornar413QuandoUploadExcederLimite() {
+
+        MaxUploadSizeExceededException exception =
+                new MaxUploadSizeExceededException(1024L * 1024);
+
+        ResponseEntity<Map<String, String>> response =
+                handler.handleMaxUploadSize(exception);
+
+        assertEquals(
+                HttpStatus.PAYLOAD_TOO_LARGE,
+                response.getStatusCode()
+        );
+
+        assertNotNull(response.getBody());
+
+        assertEquals(
+                "O arquivo enviado excede o limite permitido de 1 MB",
+                response.getBody().get("message")
+        );
+    }
+
+    @Test
+    void deveRetornar500QuandoOcorrerErroInesperado() {
+
+        Exception exception =
+                new RuntimeException("Erro interno de conexão com banco");
+
+        ResponseEntity<Map<String, String>> response =
+                handler.handleGenericException(exception);
+
+        assertEquals(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                response.getStatusCode()
+        );
+
+        assertNotNull(response.getBody());
+
+        assertEquals(
+                "Erro interno do servidor",
+                response.getBody().get("message")
+        );
+
+        assertFalse(
+                response.getBody().get("message").contains("banco")
+        );
+    }
+
+    @Test
+    void deveRetornar403QuandoUsuarioNaoTemPermissao() {
+
+        AccessDeniedException exception =
+                new AccessDeniedException("Acesso negado");
+
+        ResponseEntity<Map<String, String>> response =
+                handler.handleAccessDenied(exception);
+
+        assertEquals(
+                HttpStatus.FORBIDDEN,
+                response.getStatusCode()
+        );
+
+        assertNotNull(response.getBody());
+
+        assertEquals(
+                "Você não tem permissão para alterar ou excluir este usuário",
+                response.getBody().get("message")
         );
     }
 

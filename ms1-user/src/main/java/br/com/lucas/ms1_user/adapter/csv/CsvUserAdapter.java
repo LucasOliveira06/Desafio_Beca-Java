@@ -1,38 +1,57 @@
 package br.com.lucas.ms1_user.adapter.csv;
 
-import br.com.lucas.ms1_user.domain.model.User;
-import org.springframework.stereotype.Component;
 import br.com.lucas.ms1_user.application.port.out.CsvUserReaderPort;
+import br.com.lucas.ms1_user.domain.model.CsvUserRow;
+import br.com.lucas.ms1_user.domain.model.User;
+
+import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Component
 public class CsvUserAdapter implements CsvUserReaderPort {
+    private static final int MAX_CSV_ROWS = 1000;
 
     @Override
-    public List<User> parse(String content) {
+    public List<CsvUserRow> parse(String content) {
 
-        List<User> users = new ArrayList<>();
-
-        String[] lines = content.stripLeading().split("\\R");
-
-        if (lines.length < 2) {
+        if (content == null || content.isBlank()) {
             throw new IllegalArgumentException(
-                    "O CSV deve conter cabeçalho e pelo menos um usuário"
+                    "O arquivo CSV está vazio"
             );
         }
 
-        String header = lines[0].replace("\uFEFF", "").trim();
+        List<CsvUserRow> rows = new ArrayList<>();
 
-        
+        String[] lines = content.split("\\R", -1);
+
+
+        int headerIndex = 0;
+
+        while (headerIndex < lines.length
+                && lines[headerIndex].isBlank()) {
+            headerIndex++;
+        }
+
+        if (headerIndex >= lines.length) {
+            throw new IllegalArgumentException(
+                    "O arquivo CSV está vazio"
+            );
+        }
+
+        String header = lines[headerIndex]
+                .replace("\uFEFF", "")
+                .trim();
+
         if (!header.equals("name,email,password")) {
             throw new IllegalArgumentException(
                     "Cabeçalho inválido. Use: name,email,password"
             );
         }
 
-        for (int i = 1; i < lines.length; i++) {
+        int rowCount = 0;
+        for (int i = headerIndex + 1; i < lines.length; i++) {
 
             String line = lines[i].trim();
 
@@ -40,29 +59,47 @@ public class CsvUserAdapter implements CsvUserReaderPort {
                 continue;
             }
 
-            String[] columns = line.split(",", -1);
+            rowCount++;
 
-            if (columns.length != 3) {
+            if (rowCount > MAX_CSV_ROWS) {
                 throw new IllegalArgumentException(
-                        "Linha " + (i + 1) + ": formato inválido"
+                        "O CSV deve conter no máximo 1000 linhas de dados"
                 );
             }
 
-            users.add(new User(
+            String[] columns = line.split(",", -1);
+
+            if (columns.length != 3) {
+
+                rows.add(new CsvUserRow(
+                        i + 1,
+                        null,
+                        "Formato inválido. Esperadas 3 colunas"
+                ));
+
+                continue;
+            }
+
+            User user = new User(
                     null,
                     columns[0].trim(),
                     columns[1].trim(),
                     columns[2].trim()
+            );
+
+            rows.add(new CsvUserRow(
+                    i + 1,
+                    user,
+                    null
             ));
         }
 
-           if (users.isEmpty()) {
-              throw new IllegalArgumentException(
+        if (rows.isEmpty()) {
+            throw new IllegalArgumentException(
                     "O CSV não contém usuários para importar"
             );
         }
 
-        return users;
+        return rows;
     }
 }
-

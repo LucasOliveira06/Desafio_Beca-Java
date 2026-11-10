@@ -1,23 +1,27 @@
 package br.com.lucas.ms1_user.application.service;
 
+import br.com.lucas.ms1_user.application.dto.CsvImportResult;
 import br.com.lucas.ms1_user.application.port.out.CsvUserReaderPort;
 import br.com.lucas.ms1_user.application.port.out.PasswordEncoderPort;
 import br.com.lucas.ms1_user.application.port.out.UserRepositoryPort;
 import br.com.lucas.ms1_user.application.validation.UserValidator;
-import br.com.lucas.ms1_user.domain.model.User;
 import br.com.lucas.ms1_user.domain.exception.EmailAlreadyExistsException;
 import br.com.lucas.ms1_user.domain.exception.UserNotFoundException;
-import java.util.Optional;
-import java.util.List;
+import br.com.lucas.ms1_user.domain.model.CsvUserRow;
+import br.com.lucas.ms1_user.domain.model.User;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -83,9 +87,7 @@ class UserServiceTest {
         );
 
         verify(repository).existsByEmail("lucas@exemplo.com");
-
         verify(repository, never()).save(any(User.class));
-
         verifyNoInteractions(passwordEncoder);
     }
 
@@ -149,10 +151,10 @@ class UserServiceTest {
     void deveImportarUsuariosDoCsv() {
 
         String content = """
-            name,email,password
-            Ana Silva,ana.csv@exemplo.com,SenhaAna123
-            Pedro Souza,pedro.csv@exemplo.com,SenhaPedro123
-            """;
+                name,email,password
+                Ana Silva,ana.csv@exemplo.com,SenhaAna123
+                Pedro Souza,pedro.csv@exemplo.com,SenhaPedro123
+                """;
 
         User ana = new User(
                 null,
@@ -169,7 +171,10 @@ class UserServiceTest {
         );
 
         when(csvUserReader.parse(content))
-                .thenReturn(List.of(ana, pedro));
+                .thenReturn(List.of(
+                        new CsvUserRow(2, ana, null),
+                        new CsvUserRow(3, pedro, null)
+                ));
 
         when(passwordEncoder.encode("SenhaAna123"))
                 .thenReturn("hashAna");
@@ -180,29 +185,29 @@ class UserServiceTest {
         when(repository.save(any(User.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        List<User> result = userService.importCsv(content);
+        CsvImportResult result = userService.importCsv(content);
 
-        assertEquals(2, result.size());
+        assertEquals(2, result.totalImported());
+        assertTrue(result.errors().isEmpty());
 
-        assertEquals("hashAna", result.get(0).getPassword());
-        assertEquals("hashPedro", result.get(1).getPassword());
+        assertEquals("hashAna", ana.getPassword());
+        assertEquals("hashPedro", pedro.getPassword());
 
         verify(csvUserReader).parse(content);
-
         verify(userValidator).validate(ana);
         verify(userValidator).validate(pedro);
-
         verify(repository, times(2)).save(any(User.class));
     }
 
     @Test
-    void deveRejeitarCsvComUsuarioInvalido() {
+    void deveImportarValidosMesmoComUsuarioInvalido() {
 
         String content = """
-            name,email,password
-            Ana Silva,ana@exemplo.com,SenhaAna123
-            Pedro Souza,pedro@exemplo.com,123
-            """;
+                name,email,password
+                Ana Silva,ana@exemplo.com,SenhaAna123
+                Pedro Souza,pedro@exemplo.com,123
+                Maria Oliveira,maria@exemplo.com,SenhaMaria123
+                """;
 
         User ana = new User(
                 null,
@@ -218,39 +223,71 @@ class UserServiceTest {
                 "123"
         );
 
-        when(csvUserReader.parse(content))
-                .thenReturn(List.of(ana, pedro));
-
-        doNothing().when(userValidator).validate(ana);
-
-        doThrow(new IllegalArgumentException(
-                "A senha deve ter no mínimo 8 caracteres"
-        )).when(userValidator).validate(pedro);
-
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> userService.importCsv(content)
+        User maria = new User(
+                null,
+                "Maria Oliveira",
+                "maria@exemplo.com",
+                "SenhaMaria123"
         );
 
+        when(csvUserReader.parse(content))
+                .thenReturn(List.of(
+                        new CsvUserRow(2, ana, null),
+                        new CsvUserRow(3, pedro, null),
+                        new CsvUserRow(4, maria, null)
+                ));
+
+        doAnswer(invocation -> {
+
+            User user = invocation.getArgument(0);
+
+            if (user == pedro) {
+                throw new IllegalArgumentException(
+                        "A senha deve ter no mínimo 8 caracteres"
+                );
+            }
+
+            return null;
+
+        }).when(userValidator).validate(any(User.class));
+
+        when(passwordEncoder.encode("SenhaAna123"))
+                .thenReturn("hashAna");
+
+        when(passwordEncoder.encode("SenhaMaria123"))
+                .thenReturn("hashMaria");
+
+        when(repository.save(any(User.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        CsvImportResult result = userService.importCsv(content);
+
+        assertEquals(2, result.totalImported());
+        assertEquals(1, result.errors().size());
+
+        assertEquals(3, result.errors().get(0).line());
         assertEquals(
                 "A senha deve ter no mínimo 8 caracteres",
-                exception.getMessage()
+                result.errors().get(0).reason()
         );
 
         verify(userValidator).validate(ana);
         verify(userValidator).validate(pedro);
+        verify(userValidator).validate(maria);
 
-        verifyNoInteractions(repository, passwordEncoder);
+        verify(repository, times(2)).save(any(User.class));
+        verify(passwordEncoder, never()).encode("123");
     }
 
     @Test
-    void deveRejeitarCsvComEmailDuplicado() {
+    void deveRegistrarEmailDuplicadoEContinuarImportacao() {
 
         String content = """
-            name,email,password
-            Roberto Silva,roberto@exemplo.com,SenhaRoberto123
-            Usuario Duplicado,teste.security@exemplo.com,Senha12345
-            """;
+                name,email,password
+                Roberto Silva,roberto@exemplo.com,SenhaRoberto123
+                Usuario Duplicado,teste.security@exemplo.com,Senha12345
+                Maria Oliveira,maria@exemplo.com,SenhaMaria123
+                """;
 
         User roberto = new User(
                 null,
@@ -266,8 +303,19 @@ class UserServiceTest {
                 "Senha12345"
         );
 
+        User maria = new User(
+                null,
+                "Maria Oliveira",
+                "maria@exemplo.com",
+                "SenhaMaria123"
+        );
+
         when(csvUserReader.parse(content))
-                .thenReturn(List.of(roberto, duplicado));
+                .thenReturn(List.of(
+                        new CsvUserRow(2, roberto, null),
+                        new CsvUserRow(3, duplicado, null),
+                        new CsvUserRow(4, maria, null)
+                ));
 
         when(repository.existsByEmail(anyString()))
                 .thenAnswer(invocation -> {
@@ -278,25 +326,89 @@ class UserServiceTest {
         when(passwordEncoder.encode("SenhaRoberto123"))
                 .thenReturn("hashRoberto");
 
+        when(passwordEncoder.encode("SenhaMaria123"))
+                .thenReturn("hashMaria");
+
         when(repository.save(any(User.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertThrows(
-                EmailAlreadyExistsException.class,
-                () -> userService.importCsv(content)
+        CsvImportResult result = userService.importCsv(content);
+
+        assertEquals(2, result.totalImported());
+        assertEquals(1, result.errors().size());
+
+        assertEquals(3, result.errors().get(0).line());
+        assertEquals(
+                "E-mail já cadastrado",
+                result.errors().get(0).reason()
         );
 
         verify(userValidator).validate(roberto);
         verify(userValidator).validate(duplicado);
+        verify(userValidator).validate(maria);
 
-        verify(repository).existsByEmail("roberto@exemplo.com");
-        verify(repository).existsByEmail("teste.security@exemplo.com");
+        verify(repository, times(2)).save(any(User.class));
 
-        verify(repository, times(1)).save(any(User.class));
-
-        verify(passwordEncoder).encode("SenhaRoberto123");
         verify(passwordEncoder, never()).encode("Senha12345");
     }
 
-}
+    @Test
+    void deveRegistrarLinhaMalformadaEContinuarImportacao() {
 
+        String content = """
+                name,email,password
+                Ana Silva,ana@exemplo.com,SenhaAna123
+                Pedro Souza,pedro@exemplo.com
+                Maria Oliveira,maria@exemplo.com,SenhaMaria123
+                """;
+
+        User ana = new User(
+                null,
+                "Ana Silva",
+                "ana@exemplo.com",
+                "SenhaAna123"
+        );
+
+        User maria = new User(
+                null,
+                "Maria Oliveira",
+                "maria@exemplo.com",
+                "SenhaMaria123"
+        );
+
+        when(csvUserReader.parse(content))
+                .thenReturn(List.of(
+                        new CsvUserRow(2, ana, null),
+                        new CsvUserRow(
+                                3,
+                                null,
+                                "Formato inválido. Esperadas 3 colunas"
+                        ),
+                        new CsvUserRow(4, maria, null)
+                ));
+
+        when(passwordEncoder.encode("SenhaAna123"))
+                .thenReturn("hashAna");
+
+        when(passwordEncoder.encode("SenhaMaria123"))
+                .thenReturn("hashMaria");
+
+        when(repository.save(any(User.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        CsvImportResult result = userService.importCsv(content);
+
+        assertEquals(2, result.totalImported());
+        assertEquals(1, result.errors().size());
+
+        assertEquals(3, result.errors().get(0).line());
+        assertEquals(
+                "Formato inválido. Esperadas 3 colunas",
+                result.errors().get(0).reason()
+        );
+
+        verify(userValidator).validate(ana);
+        verify(userValidator).validate(maria);
+        verify(repository, times(2)).save(any(User.class));
+    }
+}
