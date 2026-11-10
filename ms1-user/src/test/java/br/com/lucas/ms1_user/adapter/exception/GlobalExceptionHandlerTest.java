@@ -2,7 +2,9 @@ package br.com.lucas.ms1_user.adapter.exception;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
 import br.com.lucas.ms1_user.domain.exception.UserNotFoundException;
 import br.com.lucas.ms1_user.domain.exception.EmailAlreadyExistsException;
 import org.springframework.validation.BindingResult;
@@ -12,6 +14,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.context.request.ServletWebRequest;
 
 import java.util.Map;
 
@@ -116,19 +119,28 @@ class GlobalExceptionHandlerTest {
         when(exception.getBindingResult())
                 .thenReturn(bindingResult);
 
-        ResponseEntity<Map<String, String>> response =
-                handler.handleValidation(exception);
+        ResponseEntity<Object> response =
+                handler.handleMethodArgumentNotValid(
+                        exception,
+                        new HttpHeaders(),
+                        HttpStatus.BAD_REQUEST,
+                        new ServletWebRequest(
+                                new MockHttpServletRequest()
+                        )
+                );
 
         assertEquals(
                 HttpStatus.BAD_REQUEST,
                 response.getStatusCode()
         );
 
-        assertNotNull(response.getBody());
+        assertInstanceOf(Map.class, response.getBody());
+
+        Map<?, ?> errors = (Map<?, ?>) response.getBody();
 
         assertEquals(
                 "E-mail inválido",
-                response.getBody().get("email")
+                errors.get("email")
         );
     }
 
@@ -221,7 +233,7 @@ class GlobalExceptionHandlerTest {
         assertNotNull(response.getBody());
 
         assertEquals(
-                "Você não tem permissão para alterar ou excluir este usuário",
+                "Você não tem permissão para acessar este usuário",
                 response.getBody().get("message")
         );
     }

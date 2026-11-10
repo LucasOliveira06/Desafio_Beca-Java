@@ -57,6 +57,34 @@ class CsvUserAdapterTest {
     }
 
     @Test
+    void deveAceitarCabecalhoComMaiusculas() {
+
+        String content = """
+                Name,Email,Password
+                Ana Silva,ana@exemplo.com,SenhaAna123
+                """;
+
+        List<CsvUserRow> rows = csvUserAdapter.parse(content);
+
+        assertEquals(1, rows.size());
+        assertEquals("Ana Silva", rows.get(0).user().getName());
+    }
+
+    @Test
+    void deveAceitarCsvDoExcelComPontoEVirgula() {
+
+        String content = """
+                Name;Email;Password
+                Ana Silva;ana@exemplo.com;SenhaAna123
+                """;
+
+        List<CsvUserRow> rows = csvUserAdapter.parse(content);
+
+        assertEquals(1, rows.size());
+        assertEquals("ana@exemplo.com", rows.get(0).user().getEmail());
+    }
+
+    @Test
     void deveRejeitarCsvSemUsuarios() {
 
         String content = """

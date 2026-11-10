@@ -72,7 +72,9 @@ class UserControllerTest {
     }
 
     @Test
-    void deveListarUsuariosSemExporSenha() {
+    void deveRetornarSomenteUsuarioAutenticado() {
+
+        Principal principal = () -> "ana@exemplo.com";
 
         User user = new User(
                 1L,
@@ -81,26 +83,24 @@ class UserControllerTest {
                 "hashSimulado"
         );
 
-        when(userUseCase.findAll())
-                .thenReturn(List.of(user));
+        when(userUseCase.findByEmail("ana@exemplo.com"))
+                .thenReturn(user);
 
-        List<UserResponseDTO> response = controller.findAll();
+        List<UserResponseDTO> response = controller.findAll(principal);
 
         assertEquals(1, response.size());
+        assertEquals("Ana Silva", response.get(0).getName());
+        assertEquals("ana@exemplo.com", response.get(0).getEmail());
 
-        UserResponseDTO result = response.get(0);
-
-        assertEquals(1L, result.getId());
-        assertEquals("Ana Silva", result.getName());
-        assertEquals("ana@exemplo.com", result.getEmail());
-
-        verify(userUseCase).findAll();
+        verify(userUseCase).findByEmail("ana@exemplo.com");
+        verify(userUseCase, never()).findAll();
     }
 
     @Test
     void deveBuscarUsuarioPorIdSemExporSenha() {
 
         Long id = 1L;
+        Principal principal = () -> "ana@exemplo.com";
 
         User user = new User(
                 id,
@@ -112,11 +112,35 @@ class UserControllerTest {
         when(userUseCase.findById(id))
                 .thenReturn(user);
 
-        UserResponseDTO response = controller.findById(id);
+        UserResponseDTO response = controller.findById(id, principal);
 
         assertEquals(1L, response.getId());
         assertEquals("Ana Silva", response.getName());
         assertEquals("ana@exemplo.com", response.getEmail());
+
+        verify(userUseCase).findById(id);
+    }
+
+    @Test
+    void deveImpedirConsultaDeOutroUsuario() {
+
+        Long id = 2L;
+        Principal principal = () -> "ana@exemplo.com";
+
+        User pedro = new User(
+                id,
+                "Pedro Souza",
+                "pedro@exemplo.com",
+                "hashPedro"
+        );
+
+        when(userUseCase.findById(id))
+                .thenReturn(pedro);
+
+        assertThrows(
+                AccessDeniedException.class,
+                () -> controller.findById(id, principal)
+        );
 
         verify(userUseCase).findById(id);
     }

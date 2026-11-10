@@ -91,7 +91,7 @@ public class UserController {
 
     @Operation(
             summary = "Listar usuários",
-            description = "Retorna todos os usuários cadastrados, sem expor as senhas"
+            description = "Retorna os dados do usuário autenticado, sem expor a senha"
     )
     @SecurityRequirement(name = "basicAuth")
     @ApiResponses({
@@ -105,14 +105,16 @@ public class UserController {
             )
     })
     @GetMapping
-    public List<UserResponseDTO> findAll() {
+    public List<UserResponseDTO> findAll(Principal principal) {
 
-        return userUseCase.findAll()
-                .stream()
-                .map(this::toResponseDTO)
-                .toList();
+        if (principal == null) {
+            throw new AccessDeniedException("Acesso negado");
+        }
+
+        User user = userUseCase.findByEmail(principal.getName());
+
+        return List.of(toResponseDTO(user));
     }
-
 
     @Operation(
             summary = "Buscar usuário por ID",
@@ -134,13 +136,14 @@ public class UserController {
             )
     })
     @GetMapping("/{id}")
-    public UserResponseDTO findById(@PathVariable Long id) {
+    public UserResponseDTO findById(
+            @PathVariable Long id,
+            Principal principal) {
 
-        User user = userUseCase.findById(id);
+        User user = validateOwner(id, principal);
 
         return toResponseDTO(user);
     }
-
 
     @Operation(
             summary = "Atualizar usuário",
@@ -284,7 +287,7 @@ public class UserController {
 
     // VERIFICAR SE O USUÁRIO É DONO DA CONTA
 
-    private void validateOwner(Long id, Principal principal) {
+    private User validateOwner(Long id, Principal principal) {
 
         if (principal == null) {
             throw new AccessDeniedException("Acesso negado");
@@ -295,6 +298,8 @@ public class UserController {
         if (!user.getEmail().equalsIgnoreCase(principal.getName())) {
             throw new AccessDeniedException("Acesso negado");
         }
+
+        return user;
     }
 
     private UserResponseDTO toResponseDTO(User user) {

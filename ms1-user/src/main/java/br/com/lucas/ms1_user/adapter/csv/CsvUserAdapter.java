@@ -8,6 +8,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 @Component
 public class CsvUserAdapter implements CsvUserReaderPort {
@@ -44,7 +46,13 @@ public class CsvUserAdapter implements CsvUserReaderPort {
                 .replace("\uFEFF", "")
                 .trim();
 
-        if (!header.equals("name,email,password")) {
+        char separator = detectSeparator(header);
+        String[] headerColumns = header.split(
+                Pattern.quote(String.valueOf(separator)),
+                -1
+        );
+
+        if (!hasExpectedHeader(headerColumns)) {
             throw new IllegalArgumentException(
                     "Cabeçalho inválido. Use: name,email,password"
             );
@@ -67,7 +75,10 @@ public class CsvUserAdapter implements CsvUserReaderPort {
                 );
             }
 
-            String[] columns = line.split(",", -1);
+            String[] columns = line.split(
+                    Pattern.quote(String.valueOf(separator)),
+                    -1
+            );
 
             if (columns.length != 3) {
 
@@ -101,5 +112,32 @@ public class CsvUserAdapter implements CsvUserReaderPort {
         }
 
         return rows;
+    }
+
+    private char detectSeparator(String header) {
+        boolean hasComma = header.contains(",");
+        boolean hasSemicolon = header.contains(";");
+
+        if (hasComma == hasSemicolon) {
+            throw new IllegalArgumentException(
+                    "Cabeçalho inválido. Use: name,email,password"
+            );
+        }
+
+        return hasSemicolon ? ';' : ',';
+    }
+
+    private boolean hasExpectedHeader(String[] columns) {
+        if (columns.length != 3) {
+            return false;
+        }
+
+        return normalizeHeader(columns[0]).equals("name")
+                && normalizeHeader(columns[1]).equals("email")
+                && normalizeHeader(columns[2]).equals("password");
+    }
+
+    private String normalizeHeader(String header) {
+        return header.trim().toLowerCase(Locale.ROOT);
     }
 }

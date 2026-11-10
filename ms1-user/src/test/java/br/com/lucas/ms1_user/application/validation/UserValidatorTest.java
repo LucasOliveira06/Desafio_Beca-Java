@@ -32,8 +32,8 @@ class UserValidatorTest {
                 "SenhaAna123"
         );
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
+        UserFieldValidationException exception = assertThrows(
+                UserFieldValidationException.class,
                 () -> validator.validate(user)
         );
 
@@ -41,6 +41,7 @@ class UserValidatorTest {
                 "O nome é obrigatório",
                 exception.getMessage()
         );
+        assertEquals("name", exception.getField());
     }
 
     @Test
@@ -53,8 +54,8 @@ class UserValidatorTest {
                 "SenhaAna123"
         );
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
+        UserFieldValidationException exception = assertThrows(
+                UserFieldValidationException.class,
                 () -> validator.validate(user)
         );
 
@@ -62,6 +63,7 @@ class UserValidatorTest {
                 "O email deve ser válido",
                 exception.getMessage()
         );
+        assertEquals("email", exception.getField());
     }
 
     @Test
@@ -74,8 +76,8 @@ class UserValidatorTest {
                 "123"
         );
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
+        UserFieldValidationException exception = assertThrows(
+                UserFieldValidationException.class,
                 () -> validator.validate(user)
         );
 
@@ -83,6 +85,7 @@ class UserValidatorTest {
                 "A senha deve ter no mínimo 8 caracteres",
                 exception.getMessage()
         );
+        assertEquals("password", exception.getField());
     }
 }
 

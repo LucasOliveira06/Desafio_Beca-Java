@@ -5,6 +5,7 @@ import br.com.lucas.ms1_user.application.port.out.CsvUserReaderPort;
 import br.com.lucas.ms1_user.application.port.out.PasswordEncoderPort;
 import br.com.lucas.ms1_user.application.port.out.UserRepositoryPort;
 import br.com.lucas.ms1_user.application.validation.UserValidator;
+import br.com.lucas.ms1_user.application.validation.UserFieldValidationException;
 import br.com.lucas.ms1_user.domain.exception.EmailAlreadyExistsException;
 import br.com.lucas.ms1_user.domain.exception.UserNotFoundException;
 import br.com.lucas.ms1_user.domain.model.CsvUserRow;
@@ -105,6 +106,25 @@ class UserServiceTest {
         );
 
         verify(repository).findById(id);
+    }
+
+    @Test
+    void deveBuscarUsuarioPorEmailNormalizado() {
+
+        User user = new User(
+                1L,
+                "Ana Silva",
+                "ana@exemplo.com",
+                "hashSimulado"
+        );
+
+        when(repository.findByEmail("ana@exemplo.com"))
+                .thenReturn(Optional.of(user));
+
+        User result = userService.findByEmail(" ANA@EXEMPLO.COM ");
+
+        assertEquals(user, result);
+        verify(repository).findByEmail("ana@exemplo.com");
     }
 
     @Test
@@ -242,7 +262,8 @@ class UserServiceTest {
             User user = invocation.getArgument(0);
 
             if (user == pedro) {
-                throw new IllegalArgumentException(
+                throw new UserFieldValidationException(
+                        "password",
                         "A senha deve ter no mínimo 8 caracteres"
                 );
             }
@@ -266,6 +287,7 @@ class UserServiceTest {
         assertEquals(1, result.errors().size());
 
         assertEquals(3, result.errors().get(0).line());
+        assertEquals("password", result.errors().get(0).field());
         assertEquals(
                 "A senha deve ter no mínimo 8 caracteres",
                 result.errors().get(0).reason()
@@ -338,6 +360,7 @@ class UserServiceTest {
         assertEquals(1, result.errors().size());
 
         assertEquals(3, result.errors().get(0).line());
+        assertEquals("email", result.errors().get(0).field());
         assertEquals(
                 "E-mail já cadastrado",
                 result.errors().get(0).reason()
@@ -402,6 +425,7 @@ class UserServiceTest {
         assertEquals(1, result.errors().size());
 
         assertEquals(3, result.errors().get(0).line());
+        assertEquals("row", result.errors().get(0).field());
         assertEquals(
                 "Formato inválido. Esperadas 3 colunas",
                 result.errors().get(0).reason()

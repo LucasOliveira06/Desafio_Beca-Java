@@ -8,6 +8,7 @@ import br.com.lucas.ms1_user.domain.exception.UserNotFoundException;
 import br.com.lucas.ms1_user.domain.exception.EmailAlreadyExistsException;
 import br.com.lucas.ms1_user.application.port.out.CsvUserReaderPort;
 import br.com.lucas.ms1_user.application.validation.UserValidator;
+import br.com.lucas.ms1_user.application.validation.UserFieldValidationException;
 import br.com.lucas.ms1_user.application.dto.CsvImportError;
 import br.com.lucas.ms1_user.application.dto.CsvImportResult;
 import br.com.lucas.ms1_user.domain.model.CsvUserRow;
@@ -67,6 +68,14 @@ public class UserService implements UserUseCase {
     }
 
     @Override
+    public User findByEmail(String email) {
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+
+        return repository.findByEmail(normalizedEmail)
+                .orElseThrow(UserNotFoundException::new);
+    }
+
+    @Override
     public User update(Long id, User user) {
 
         User existingUser = findById(id);
@@ -108,6 +117,7 @@ public class UserService implements UserUseCase {
             if (row.error() != null) {
                 errors.add(new CsvImportError(
                         row.lineNumber(),
+                        "row",
                         row.error()
                 ));
                 continue;
@@ -126,13 +136,23 @@ public class UserService implements UserUseCase {
 
                 errors.add(new CsvImportError(
                         row.lineNumber(),
+                        "email",
                         "E-mail já cadastrado"
+                ));
+
+            } catch (UserFieldValidationException exception) {
+
+                errors.add(new CsvImportError(
+                        row.lineNumber(),
+                        exception.getField(),
+                        exception.getMessage()
                 ));
 
             } catch (IllegalArgumentException exception) {
 
                 errors.add(new CsvImportError(
                         row.lineNumber(),
+                        "row",
                         exception.getMessage()
                 ));
 
@@ -140,6 +160,7 @@ public class UserService implements UserUseCase {
 
                 errors.add(new CsvImportError(
                         row.lineNumber(),
+                        "row",
                         "Conflito de dados ao salvar usuário"
                 ));
             }
