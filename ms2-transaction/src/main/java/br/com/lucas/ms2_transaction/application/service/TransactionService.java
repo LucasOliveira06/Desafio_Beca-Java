@@ -8,12 +8,16 @@ import br.com.lucas.ms2_transaction.application.port.out.AccountBalancePort;
 import br.com.lucas.ms2_transaction.application.port.out.TransactionRepositoryPort;
 import br.com.lucas.ms2_transaction.domain.model.Transaction;
 import br.com.lucas.ms2_transaction.domain.model.TransactionType;
+import br.com.lucas.ms2_transaction.application.exception.TransactionNotFoundException;
+import br.com.lucas.ms2_transaction.application.port.in.FindTransactionByIdUseCase;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 
 @Service
-public class TransactionService implements CreateTransactionUseCase {
+public class TransactionService implements
+        CreateTransactionUseCase,
+        FindTransactionByIdUseCase {
 
     private final TransactionRepositoryPort transactionRepositoryPort;
     private final AccountBalancePort accountBalancePort;
@@ -80,6 +84,16 @@ public class TransactionService implements CreateTransactionUseCase {
                     "Não foi possível consultar o saldo e os limites do usuário."
             );
         }
+    }
+
+    @Override
+    public Transaction findById(
+            Long id,
+            Long ownerUserId
+    ) {
+        return transactionRepositoryPort
+                .findByIdAndOwnerUserId(id, ownerUserId)
+                .orElseThrow(TransactionNotFoundException::new);
     }
 
     private Transaction rejectAndSave(Transaction transaction, String reason) {

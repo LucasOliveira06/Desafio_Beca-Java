@@ -10,9 +10,14 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.Optional;
 
 public interface SpringDataTransactionRepository
         extends JpaRepository<TransactionEntity, Long> {
+    Optional<TransactionEntity> findByIdAndOwnerUserId(
+            Long id,
+            Long ownerUserId
+    );
 
     @Query("""
             SELECT SUM(transaction.amount)

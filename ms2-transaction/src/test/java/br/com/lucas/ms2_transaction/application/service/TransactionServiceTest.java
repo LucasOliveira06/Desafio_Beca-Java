@@ -8,8 +8,10 @@ import br.com.lucas.ms2_transaction.application.port.out.TransactionRepositoryPo
 import br.com.lucas.ms2_transaction.domain.model.Transaction;
 import br.com.lucas.ms2_transaction.domain.model.TransactionStatus;
 import br.com.lucas.ms2_transaction.domain.model.TransactionType;
+import br.com.lucas.ms2_transaction.application.exception.TransactionNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import java.util.Optional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -17,6 +19,7 @@ import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TransactionServiceTest {
 
@@ -32,6 +35,51 @@ class TransactionServiceTest {
         transactionService = new TransactionService(
                 transactionRepository,
                 accountBalancePort
+        );
+    }
+
+    @Test
+    void deveBuscarTransacaoQuandoPertencerAoUsuario() {
+        Transaction transaction = new Transaction(
+                10L,
+                TransactionType.DEPOSIT,
+                new BigDecimal("200.00"),
+                LocalDateTime.of(2026, 11, 11, 16, 0),
+                "Depósito de teste",
+                null,
+                1L,
+                null
+        );
+
+        transaction.approve();
+        transactionRepository.transactionToFind = transaction;
+
+        Transaction result = transactionService.findById(10L, 1L);
+
+        assertEquals(10L, result.getId());
+        assertEquals(1L, result.getOwnerUserId());
+        assertEquals(TransactionStatus.APPROVED, result.getStatus());
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoTransacaoNaoPertencerAoUsuario() {
+        Transaction transaction = new Transaction(
+                10L,
+                TransactionType.DEPOSIT,
+                new BigDecimal("200.00"),
+                LocalDateTime.of(2026, 11, 11, 16, 0),
+                "Depósito de teste",
+                null,
+                1L,
+                null
+        );
+
+        transaction.approve();
+        transactionRepository.transactionToFind = transaction;
+
+        assertThrows(
+                TransactionNotFoundException.class,
+                () -> transactionService.findById(10L, 2L)
         );
     }
 
@@ -124,11 +172,34 @@ class TransactionServiceTest {
 
         private Transaction savedTransaction;
         private BigDecimal dailyTotal = BigDecimal.ZERO;
+        private Transaction transactionToFind;
 
         @Override
         public Transaction save(Transaction transaction) {
             savedTransaction = transaction;
             return transaction;
+        }
+
+        @Override
+        public Optional<Transaction> findByIdAndOwnerUserId(
+                Long id,
+                Long ownerUserId
+        ) {
+            if (transactionToFind == null) {
+                return Optional.empty();
+            }
+
+            boolean sameTransaction =
+                    transactionToFind.getId().equals(id);
+
+            boolean sameOwner =
+                    transactionToFind.getOwnerUserId().equals(ownerUserId);
+
+            if (sameTransaction && sameOwner) {
+                return Optional.of(transactionToFind);
+            }
+
+            return Optional.empty();
         }
 
         @Override

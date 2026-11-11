@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public class TransactionPersistenceAdapter implements TransactionRepositoryPort {
@@ -37,6 +38,15 @@ public class TransactionPersistenceAdapter implements TransactionRepositoryPort 
                 springDataTransactionRepository.save(entity);
 
         return transactionPersistenceMapper.toDomain(savedEntity);
+    }
+    @Override
+    public Optional<Transaction> findByIdAndOwnerUserId(
+            Long id,
+            Long ownerUserId
+    ) {
+        return springDataTransactionRepository
+                .findByIdAndOwnerUserId(id, ownerUserId)
+                .map(transactionPersistenceMapper::toDomain);
     }
 
     @Override

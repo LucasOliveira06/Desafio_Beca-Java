@@ -8,6 +8,7 @@ import br.com.lucas.ms2_transaction.application.port.in.CreateTransactionUseCase
 import br.com.lucas.ms2_transaction.domain.model.Transaction;
 import br.com.lucas.ms2_transaction.domain.model.TransactionStatus;
 import br.com.lucas.ms2_transaction.domain.model.TransactionType;
+import br.com.lucas.ms2_transaction.application.port.in.FindTransactionByIdUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,6 +34,9 @@ class TransactionControllerTest {
     @Mock
     private CreateTransactionUseCase createTransactionUseCase;
 
+    @Mock
+    private FindTransactionByIdUseCase findTransactionByIdUseCase;
+
     private TransactionController transactionController;
 
     @BeforeEach
@@ -42,6 +46,7 @@ class TransactionControllerTest {
 
         transactionController = new TransactionController(
                 createTransactionUseCase,
+                findTransactionByIdUseCase,
                 mapper
         );
     }
@@ -100,5 +105,44 @@ class TransactionControllerTest {
                 1L,
                 commandCaptor.getValue().ownerUserId()
         );
+    }
+
+    @Test
+    void deveBuscarTransacaoDoUsuarioAutenticadoPorId() {
+        LocalDateTime occurredAt =
+                LocalDateTime.of(2026, 11, 11, 15, 45);
+
+        Transaction transaction = new Transaction(
+                7L,
+                TransactionType.DEPOSIT,
+                new BigDecimal("100.00"),
+                occurredAt,
+                "Depósito de teste",
+                null,
+                12L,
+                null
+        );
+
+        transaction.approve();
+
+        when(findTransactionByIdUseCase.findById(7L, 12L))
+                .thenReturn(transaction);
+
+        Principal principal = () -> "12";
+
+        ResponseEntity<TransactionResponse> response =
+                transactionController.findById(7L, principal);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(7L, response.getBody().id());
+        assertEquals(12L, response.getBody().ownerUserId());
+        assertEquals(
+                TransactionStatus.APPROVED,
+                response.getBody().status()
+        );
+
+        verify(findTransactionByIdUseCase)
+                .findById(7L, 12L);
     }
 }

@@ -4,10 +4,19 @@ import br.com.lucas.ms2_transaction.domain.model.Transaction;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Optional;
 
 public interface TransactionRepositoryPort {
 
     Transaction save(Transaction transaction);
 
-    BigDecimal sumApprovedOutgoingByOwnerUserIdAndDate(Long ownerUserId, LocalDate date);
+    Optional<Transaction> findByIdAndOwnerUserId(
+            Long id,
+            Long ownerUserId
+    );
+
+    BigDecimal sumApprovedOutgoingByOwnerUserIdAndDate(
+            Long ownerUserId,
+            LocalDate date
+    );
 }
