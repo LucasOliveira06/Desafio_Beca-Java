@@ -50,6 +50,26 @@ services:
       user-db:
         condition: service_healthy
 
+  ms2-transaction:
+    build:
+      context: ./ms2-transaction
+      dockerfile: Dockerfile
+    container_name: ms2-transaction
+    ports:
+      - "8082:8082"
+    environment:
+      SERVER_PORT: 8082
+      TRANSACTION_DB_NAME: ${TRANSACTION_DB_NAME}
+      TRANSACTION_DB_USER: ${TRANSACTION_DB_USER}
+      TRANSACTION_DB_PASSWORD: ${TRANSACTION_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://transaction-db:5432/${TRANSACTION_DB_NAME}
+      MS1_BASE_URL: http://ms1-user:8081
+    depends_on:
+      transaction-db:
+        condition: service_healthy
+      ms1-user:
+        condition: service_started
+
 volumes:
   user-db-data:
   transaction-db-data:
