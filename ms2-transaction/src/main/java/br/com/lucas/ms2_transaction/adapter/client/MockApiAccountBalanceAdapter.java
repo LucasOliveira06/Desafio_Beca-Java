@@ -11,6 +11,7 @@ import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.http.MediaType;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -46,9 +47,15 @@ public class MockApiAccountBalanceAdapter implements AccountBalancePort {
         MockApiAccountResponse account = findAccountByUserId(userId);
 
         try {
-            restClient.patch()
+            restClient.put()
                     .uri("/{id}", account.id())
-                    .body(new MockApiBalanceUpdateRequest(balance))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(new MockApiBalanceUpdateRequest(
+                            account.userId(),
+                            balance,
+                            account.dailyLimit(),
+                            account.transactionLimit()
+                    ))
                     .retrieve()
                     .toBodilessEntity();
         } catch (RestClientException exception) {
@@ -69,13 +76,18 @@ public class MockApiAccountBalanceAdapter implements AccountBalancePort {
                     .body(new ParameterizedTypeReference<>() {
                     });
 
-            if (accounts == null || accounts.isEmpty()) {
+            if (accounts == null) {
                 throw new AccountBalanceUnavailableException(
                         "Conta não encontrada na MockAPI."
                 );
             }
 
-            return accounts.getFirst();
+            return accounts.stream()
+                    .filter(account -> userId.equals(account.userId()))
+                    .findFirst()
+                    .orElseThrow(() -> new AccountBalanceUnavailableException(
+                            "Conta não encontrada para o usuário informado."
+                    ));
         } catch (RestClientException exception) {
             throw new AccountBalanceUnavailableException(
                     "Não foi possível consultar a MockAPI.",

@@ -176,6 +176,53 @@ class TransactionServiceTest {
     }
 
     @Test
+    void deveRestaurarSaldoQuandoSalvarDepositoFalhar() {
+        transactionRepository.failOnSave = true;
+
+        CreateTransactionCommand command = createCommand(
+                TransactionType.DEPOSIT,
+                new BigDecimal("100.00"),
+                null
+        );
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> transactionService.create(command)
+        );
+
+        assertEquals(
+                new BigDecimal("1000.00"),
+                accountBalancePort.updatedBalances.get(1L)
+        );
+    }
+
+    @Test
+    void deveRestaurarSaldosQuandoSalvarTransferenciaFalhar() {
+        transactionRepository.failOnSave = true;
+
+        CreateTransactionCommand command = createCommand(
+                TransactionType.TRANSFER,
+                new BigDecimal("100.00"),
+                null,
+                2L
+        );
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> transactionService.create(command)
+        );
+
+        assertEquals(
+                new BigDecimal("1000.00"),
+                accountBalancePort.updatedBalances.get(1L)
+        );
+        assertEquals(
+                new BigDecimal("300.00"),
+                accountBalancePort.updatedBalances.get(2L)
+        );
+    }
+
+    @Test
     void deveRejeitarQuandoSaldoForInsuficiente() {
         accountBalancePort.accountBalanceData = new AccountBalanceData(
                 new BigDecimal("50.00"),
@@ -324,9 +371,14 @@ class TransactionServiceTest {
         private TransactionType listedType;
         private LocalDateTime listedStart;
         private LocalDateTime listedEnd;
+        private boolean failOnSave;
 
         @Override
         public Transaction save(Transaction transaction) {
+            if (failOnSave) {
+                throw new IllegalStateException("Falha ao salvar a transação");
+            }
+
             savedTransaction = transaction;
             return transaction;
         }

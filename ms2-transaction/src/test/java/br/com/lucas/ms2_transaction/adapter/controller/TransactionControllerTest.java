@@ -4,12 +4,14 @@ import br.com.lucas.ms2_transaction.adapter.controller.dto.CreateTransactionRequ
 import br.com.lucas.ms2_transaction.adapter.controller.dto.TransactionResponse;
 import br.com.lucas.ms2_transaction.adapter.controller.mapper.TransactionControllerMapper;
 import br.com.lucas.ms2_transaction.application.dto.CreateTransactionCommand;
+import br.com.lucas.ms2_transaction.application.dto.CurrencyConversionData;
 import br.com.lucas.ms2_transaction.application.port.in.CreateTransactionUseCase;
 import br.com.lucas.ms2_transaction.domain.model.Transaction;
 import br.com.lucas.ms2_transaction.domain.model.TransactionStatus;
 import br.com.lucas.ms2_transaction.domain.model.TransactionType;
 import br.com.lucas.ms2_transaction.application.port.in.FindTransactionByIdUseCase;
 import br.com.lucas.ms2_transaction.application.port.in.ListTransactionsUseCase;
+import br.com.lucas.ms2_transaction.application.port.in.ConvertTransactionCurrencyUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +45,9 @@ class TransactionControllerTest {
     @Mock
     private ListTransactionsUseCase listTransactionsUseCase;
 
+    @Mock
+    private ConvertTransactionCurrencyUseCase convertTransactionCurrencyUseCase;
+
     private TransactionController transactionController;
 
     @BeforeEach
@@ -54,6 +59,7 @@ class TransactionControllerTest {
                 createTransactionUseCase,
                 findTransactionByIdUseCase,
                 listTransactionsUseCase,
+                convertTransactionCurrencyUseCase,
                 mapper
         );
     }
@@ -134,6 +140,28 @@ class TransactionControllerTest {
         when(findTransactionByIdUseCase.findById(7L, 12L))
                 .thenReturn(transaction);
 
+        List<CurrencyConversionData> conversions = List.of(
+                new CurrencyConversionData(
+                        "USD",
+                        new BigDecimal("18.00"),
+                        new BigDecimal("5.5553"),
+                        LocalDate.of(2026, 11, 11),
+                        true
+                ),
+                new CurrencyConversionData(
+                        "EUR",
+                        new BigDecimal("16.17"),
+                        new BigDecimal("6.1842"),
+                        LocalDate.of(2026, 11, 11),
+                        true
+                )
+        );
+
+        when(convertTransactionCurrencyUseCase.convert(
+                new BigDecimal("100.00"),
+                LocalDate.of(2026, 11, 11)
+        )).thenReturn(conversions);
+
         Principal principal = () -> "12";
 
         ResponseEntity<TransactionResponse> response =
@@ -147,9 +175,22 @@ class TransactionControllerTest {
                 TransactionStatus.APPROVED,
                 response.getBody().status()
         );
+        assertEquals(2, response.getBody().conversions().size());
+        assertEquals(
+                "USD",
+                response.getBody().conversions().getFirst().currency()
+        );
+        assertEquals(
+                new BigDecimal("18.00"),
+                response.getBody().conversions().getFirst().convertedAmount()
+        );
 
         verify(findTransactionByIdUseCase)
                 .findById(7L, 12L);
+        verify(convertTransactionCurrencyUseCase).convert(
+                new BigDecimal("100.00"),
+                LocalDate.of(2026, 11, 11)
+        );
     }
 
     @Test

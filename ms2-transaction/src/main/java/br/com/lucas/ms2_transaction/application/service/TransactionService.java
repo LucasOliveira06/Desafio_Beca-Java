@@ -41,7 +41,7 @@ public class TransactionService implements
     }
 
     @Override
-    public Transaction create(CreateTransactionCommand command) {
+    public synchronized Transaction create(CreateTransactionCommand command) {
         LocalDateTime occurredAt = LocalDateTime.now(clock);
 
         Transaction transaction = new Transaction(
@@ -65,8 +65,11 @@ public class TransactionService implements
                         accountBalanceData.balance().add(transaction.getAmount())
                 );
 
-                transaction.approve();
-                return transactionRepositoryPort.save(transaction);
+                return approveAndSave(
+                        transaction,
+                        accountBalanceData,
+                        null
+                );
             }
 
             if (accountBalanceData.balance().compareTo(transaction.getAmount()) < 0) {
@@ -114,7 +117,7 @@ public class TransactionService implements
                             destinationAccount.balance().add(transaction.getAmount())
                     );
                 } catch (AccountBalanceUnavailableException exception) {
-                    restoreOwnerBalance(
+                    restoreBalance(
                             transaction.getOwnerUserId(),
                             originalOwnerBalance,
                             exception
@@ -123,8 +126,11 @@ public class TransactionService implements
                 }
             }
 
-            transaction.approve();
-            return transactionRepositoryPort.save(transaction);
+            return approveAndSave(
+                    transaction,
+                    accountBalanceData,
+                    destinationAccount
+            );
 
         } catch (AccountBalanceUnavailableException exception) {
             return rejectAndSave(
@@ -149,13 +155,41 @@ public class TransactionService implements
         return transactionRepositoryPort.save(transaction);
     }
 
-    private void restoreOwnerBalance(
-            Long ownerUserId,
+    private Transaction approveAndSave(
+            Transaction transaction,
+            AccountBalanceData ownerAccount,
+            AccountBalanceData destinationAccount
+    ) {
+        transaction.approve();
+
+        try {
+            return transactionRepositoryPort.save(transaction);
+        } catch (RuntimeException exception) {
+            restoreBalance(
+                    transaction.getOwnerUserId(),
+                    ownerAccount.balance(),
+                    exception
+            );
+
+            if (destinationAccount != null) {
+                restoreBalance(
+                        transaction.getDestinationUserId(),
+                        destinationAccount.balance(),
+                        exception
+                );
+            }
+
+            throw exception;
+        }
+    }
+
+    private void restoreBalance(
+            Long userId,
             BigDecimal originalBalance,
-            AccountBalanceUnavailableException originalException
+            RuntimeException originalException
     ) {
         try {
-            accountBalancePort.updateBalance(ownerUserId, originalBalance);
+            accountBalancePort.updateBalance(userId, originalBalance);
         } catch (AccountBalanceUnavailableException rollbackException) {
             originalException.addSuppressed(rollbackException);
         }

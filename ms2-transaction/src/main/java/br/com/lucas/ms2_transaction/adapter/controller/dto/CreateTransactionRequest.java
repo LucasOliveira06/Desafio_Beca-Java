@@ -1,6 +1,8 @@
 package br.com.lucas.ms2_transaction.adapter.controller.dto;
 
 import br.com.lucas.ms2_transaction.domain.model.TransactionType;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.OptBoolean;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
@@ -34,12 +36,14 @@ public record CreateTransactionRequest(
         )
         String description,
 
+        @JsonProperty(isRequired = OptBoolean.FALSE)
         @Size(
                 max = 100,
                 message = "A categoria deve possuir no máximo 100 caracteres"
         )
         String category,
 
+        @JsonProperty(isRequired = OptBoolean.FALSE)
         @Positive(message = "O usuário de destino deve possuir um identificador válido")
         Long destinationUserId
 ) {

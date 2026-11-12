@@ -5,6 +5,7 @@ import br.com.lucas.ms2_transaction.domain.model.TransactionType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record TransactionResponse(
         Long id,
@@ -16,6 +17,7 @@ public record TransactionResponse(
         Long ownerUserId,
         Long destinationUserId,
         TransactionStatus status,
-        String rejectionReason
+        String rejectionReason,
+        List<CurrencyConversionResponse> conversions
 ) {
 }
