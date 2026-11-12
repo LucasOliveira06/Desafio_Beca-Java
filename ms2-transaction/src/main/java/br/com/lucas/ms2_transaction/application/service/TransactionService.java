@@ -13,6 +13,8 @@ import br.com.lucas.ms2_transaction.application.port.in.FindTransactionByIdUseCa
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDateTime;
 
 @Service
 public class TransactionService implements
@@ -21,36 +23,46 @@ public class TransactionService implements
 
     private final TransactionRepositoryPort transactionRepositoryPort;
     private final AccountBalancePort accountBalancePort;
+    private final Clock clock;
 
     public TransactionService(
             TransactionRepositoryPort transactionRepositoryPort,
-            AccountBalancePort accountBalancePort
+            AccountBalancePort accountBalancePort,
+            Clock clock
     ) {
         this.transactionRepositoryPort = transactionRepositoryPort;
         this.accountBalancePort = accountBalancePort;
+        this.clock = clock;
     }
 
     @Override
     public Transaction create(CreateTransactionCommand command) {
+        LocalDateTime occurredAt = LocalDateTime.now(clock);
+
         Transaction transaction = new Transaction(
                 null,
                 command.type(),
                 command.amount(),
-                command.occurredAt(),
+                occurredAt,
                 command.description(),
                 command.category(),
                 command.ownerUserId(),
                 command.destinationUserId()
         );
 
-        if (transaction.getType() == TransactionType.DEPOSIT) {
-            transaction.approve();
-            return transactionRepositoryPort.save(transaction);
-        }
-
         try {
             AccountBalanceData accountBalanceData =
                     accountBalancePort.getByUserId(transaction.getOwnerUserId());
+
+            if (transaction.getType() == TransactionType.DEPOSIT) {
+                accountBalancePort.updateBalance(
+                        transaction.getOwnerUserId(),
+                        accountBalanceData.balance().add(transaction.getAmount())
+                );
+
+                transaction.approve();
+                return transactionRepositoryPort.save(transaction);
+            }
 
             if (accountBalanceData.balance().compareTo(transaction.getAmount()) < 0) {
                 return rejectAndSave(transaction, "Saldo insuficiente para realizar a transação.");
@@ -63,7 +75,7 @@ public class TransactionService implements
             BigDecimal dailyTotal =
                     transactionRepositoryPort.sumApprovedOutgoingByOwnerUserIdAndDate(
                             transaction.getOwnerUserId(),
-                            transaction.getOccurredAt().toLocalDate()
+                            occurredAt.toLocalDate()
                     );
 
             if (dailyTotal == null) {
@@ -73,6 +85,37 @@ public class TransactionService implements
             if (dailyTotal.add(transaction.getAmount())
                     .compareTo(accountBalanceData.dailyLimit()) > 0) {
                 return rejectAndSave(transaction, "O valor da transação ultrapassa o limite diário.");
+            }
+
+            AccountBalanceData destinationAccount = null;
+
+            if (transaction.getType() == TransactionType.TRANSFER) {
+                destinationAccount = accountBalancePort.getByUserId(
+                        transaction.getDestinationUserId()
+                );
+            }
+
+            BigDecimal originalOwnerBalance = accountBalanceData.balance();
+
+            accountBalancePort.updateBalance(
+                    transaction.getOwnerUserId(),
+                    originalOwnerBalance.subtract(transaction.getAmount())
+            );
+
+            if (destinationAccount != null) {
+                try {
+                    accountBalancePort.updateBalance(
+                            transaction.getDestinationUserId(),
+                            destinationAccount.balance().add(transaction.getAmount())
+                    );
+                } catch (AccountBalanceUnavailableException exception) {
+                    restoreOwnerBalance(
+                            transaction.getOwnerUserId(),
+                            originalOwnerBalance,
+                            exception
+                    );
+                    throw exception;
+                }
             }
 
             transaction.approve();
@@ -99,5 +142,17 @@ public class TransactionService implements
     private Transaction rejectAndSave(Transaction transaction, String reason) {
         transaction.reject(reason);
         return transactionRepositoryPort.save(transaction);
+    }
+
+    private void restoreOwnerBalance(
+            Long ownerUserId,
+            BigDecimal originalBalance,
+            AccountBalanceUnavailableException originalException
+    ) {
+        try {
+            accountBalancePort.updateBalance(ownerUserId, originalBalance);
+        } catch (AccountBalanceUnavailableException rollbackException) {
+            originalException.addSuppressed(rollbackException);
+        }
     }
 }

@@ -3,6 +3,7 @@ package br.com.lucas.ms2_transaction.adapter.client;
 import br.com.lucas.ms2_transaction.adapter.client.dto.Ms1UserResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
@@ -17,10 +18,12 @@ public class Ms1AuthenticationClient {
     private final RestClient restClient;
 
     public Ms1AuthenticationClient(
-            @Value("${ms1.base-url}") String ms1BaseUrl
+            @Value("${ms1.base-url}") String ms1BaseUrl,
+            ClientHttpRequestFactory requestFactory
     ) {
         this.restClient = RestClient.builder()
                 .baseUrl(ms1BaseUrl)
+                .requestFactory(requestFactory)
                 .build();
     }
 

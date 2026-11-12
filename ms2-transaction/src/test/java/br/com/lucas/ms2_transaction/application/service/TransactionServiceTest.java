@@ -11,17 +11,25 @@ import br.com.lucas.ms2_transaction.domain.model.TransactionType;
 import br.com.lucas.ms2_transaction.application.exception.TransactionNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import java.util.Optional;
-
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TransactionServiceTest {
+
+    private static final Clock FIXED_CLOCK = Clock.fixed(
+            Instant.parse("2026-11-12T15:00:00Z"),
+            ZoneId.of("America/Sao_Paulo")
+    );
 
     private FakeTransactionRepository transactionRepository;
     private FakeAccountBalancePort accountBalancePort;
@@ -34,7 +42,8 @@ class TransactionServiceTest {
 
         transactionService = new TransactionService(
                 transactionRepository,
-                accountBalancePort
+                accountBalancePort,
+                FIXED_CLOCK
         );
     }
 
@@ -84,7 +93,7 @@ class TransactionServiceTest {
     }
 
     @Test
-    void deveAprovarDepositoSemConsultarSaldo() {
+    void deveAprovarDepositoEAtualizarSaldo() {
         CreateTransactionCommand command = createCommand(
                 TransactionType.DEPOSIT,
                 new BigDecimal("100.00"),
@@ -94,7 +103,14 @@ class TransactionServiceTest {
         Transaction transaction = transactionService.create(command);
 
         assertEquals(TransactionStatus.APPROVED, transaction.getStatus());
-        assertFalse(accountBalancePort.wasCalled);
+        assertEquals(
+                new BigDecimal("1100.00"),
+                accountBalancePort.updatedBalances.get(1L)
+        );
+        assertEquals(
+                LocalDateTime.of(2026, 11, 12, 12, 0),
+                transaction.getOccurredAt()
+        );
     }
 
     @Test
@@ -108,6 +124,53 @@ class TransactionServiceTest {
         Transaction transaction = transactionService.create(command);
 
         assertEquals(TransactionStatus.APPROVED, transaction.getStatus());
+        assertEquals(
+                new BigDecimal("900.00"),
+                accountBalancePort.updatedBalances.get(1L)
+        );
+        assertEquals(LocalDate.of(2026, 11, 12), transactionRepository.queriedDate);
+    }
+
+    @Test
+    void deveDebitarOrigemECreditarDestinoNaTransferencia() {
+        CreateTransactionCommand command = createCommand(
+                TransactionType.TRANSFER,
+                new BigDecimal("100.00"),
+                null,
+                2L
+        );
+
+        Transaction transaction = transactionService.create(command);
+
+        assertEquals(TransactionStatus.APPROVED, transaction.getStatus());
+        assertEquals(
+                new BigDecimal("900.00"),
+                accountBalancePort.updatedBalances.get(1L)
+        );
+        assertEquals(
+                new BigDecimal("400.00"),
+                accountBalancePort.updatedBalances.get(2L)
+        );
+    }
+
+    @Test
+    void deveRestaurarSaldoDaOrigemQuandoCreditoDoDestinoFalhar() {
+        accountBalancePort.unavailableOnUpdateUserId = 2L;
+
+        CreateTransactionCommand command = createCommand(
+                TransactionType.TRANSFER,
+                new BigDecimal("100.00"),
+                null,
+                2L
+        );
+
+        Transaction transaction = transactionService.create(command);
+
+        assertEquals(TransactionStatus.REJECTED, transaction.getStatus());
+        assertEquals(
+                new BigDecimal("1000.00"),
+                accountBalancePort.updatedBalances.get(1L)
+        );
     }
 
     @Test
@@ -157,14 +220,22 @@ class TransactionServiceTest {
             BigDecimal amount,
             String category
     ) {
+        return createCommand(type, amount, category, null);
+    }
+
+    private CreateTransactionCommand createCommand(
+            TransactionType type,
+            BigDecimal amount,
+            String category,
+            Long destinationUserId
+    ) {
         return new CreateTransactionCommand(
                 type,
                 amount,
-                LocalDateTime.now(),
                 "Transação de teste",
                 category,
                 1L,
-                null
+                destinationUserId
         );
     }
 
@@ -173,6 +244,7 @@ class TransactionServiceTest {
         private Transaction savedTransaction;
         private BigDecimal dailyTotal = BigDecimal.ZERO;
         private Transaction transactionToFind;
+        private LocalDate queriedDate;
 
         @Override
         public Transaction save(Transaction transaction) {
@@ -207,6 +279,7 @@ class TransactionServiceTest {
                 Long ownerUserId,
                 LocalDate date
         ) {
+            queriedDate = date;
             return dailyTotal;
         }
     }
@@ -219,20 +292,55 @@ class TransactionServiceTest {
                 new BigDecimal("500.00")
         );
 
+        private AccountBalanceData destinationAccountBalanceData = new AccountBalanceData(
+                new BigDecimal("300.00"),
+                new BigDecimal("2000.00"),
+                new BigDecimal("500.00")
+        );
+
         private boolean unavailable;
-        private boolean wasCalled;
+        private Long unavailableOnUpdateUserId;
+        private final Map<Long, BigDecimal> updatedBalances = new HashMap<>();
 
         @Override
         public AccountBalanceData getByUserId(Long userId) {
-            wasCalled = true;
-
             if (unavailable) {
                 throw new AccountBalanceUnavailableException(
                         "MockAPI indisponível"
                 );
             }
 
+            if (userId.equals(2L)) {
+                return destinationAccountBalanceData;
+            }
+
             return accountBalanceData;
+        }
+
+        @Override
+        public void updateBalance(Long userId, BigDecimal balance) {
+            if (unavailable || userId.equals(unavailableOnUpdateUserId)) {
+                throw new AccountBalanceUnavailableException(
+                        "MockAPI indisponível"
+                );
+            }
+
+            updatedBalances.put(userId, balance);
+
+            if (userId.equals(2L)) {
+                destinationAccountBalanceData = new AccountBalanceData(
+                        balance,
+                        destinationAccountBalanceData.dailyLimit(),
+                        destinationAccountBalanceData.transactionLimit()
+                );
+                return;
+            }
+
+            accountBalanceData = new AccountBalanceData(
+                    balance,
+                    accountBalanceData.dailyLimit(),
+                    accountBalanceData.transactionLimit()
+            );
         }
     }
 }

@@ -1,5 +1,7 @@
 package br.com.lucas.ms2_transaction.domain.model;
 
+import br.com.lucas.ms2_transaction.domain.exception.InvalidTransactionException;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -54,7 +56,7 @@ public class Transaction {
 
     public void reject(String reason) {
         if (reason == null || reason.isBlank()) {
-            throw new IllegalArgumentException(
+            throw new InvalidTransactionException(
                     "O motivo da rejeição é obrigatório"
             );
         }
@@ -73,52 +75,52 @@ public class Transaction {
             Long destinationUserId
     ) {
         if (type == null) {
-            throw new IllegalArgumentException(
+            throw new InvalidTransactionException(
                     "O tipo da transação é obrigatório"
             );
         }
 
         if (amount == null || amount.signum() <= 0) {
-            throw new IllegalArgumentException(
+            throw new InvalidTransactionException(
                     "O valor da transação deve ser maior que zero"
             );
         }
 
         if (occurredAt == null) {
-            throw new IllegalArgumentException(
+            throw new InvalidTransactionException(
                     "A data e hora da transação são obrigatórias"
             );
         }
 
         if (description == null || description.isBlank()) {
-            throw new IllegalArgumentException(
+            throw new InvalidTransactionException(
                     "A descrição da transação é obrigatória"
             );
         }
 
         if (ownerUserId == null || ownerUserId <= 0) {
-            throw new IllegalArgumentException(
+            throw new InvalidTransactionException(
                     "O usuário dono da transação é obrigatório"
             );
         }
 
         if (type == TransactionType.TRANSFER
                 && destinationUserId == null) {
-            throw new IllegalArgumentException(
+            throw new InvalidTransactionException(
                     "A transferência deve informar o usuário de destino"
             );
         }
 
         if (type == TransactionType.TRANSFER
                 && ownerUserId.equals(destinationUserId)) {
-            throw new IllegalArgumentException(
+            throw new InvalidTransactionException(
                     "O usuário de destino deve ser diferente do remetente"
             );
         }
 
         if (type == TransactionType.PURCHASE
                 && (category == null || category.isBlank())) {
-            throw new IllegalArgumentException(
+            throw new InvalidTransactionException(
                     "A compra deve informar uma categoria"
             );
         }

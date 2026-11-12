@@ -16,7 +16,6 @@ public class TransactionControllerMapper {
         return new CreateTransactionCommand(
                 request.type(),
                 request.amount(),
-                request.occurredAt(),
                 request.description(),
                 request.category(),
                 ownerUserId,

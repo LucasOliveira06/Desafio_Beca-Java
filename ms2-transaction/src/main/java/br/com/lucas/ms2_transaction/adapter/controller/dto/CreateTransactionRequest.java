@@ -9,7 +9,6 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 public record CreateTransactionRequest(
 
@@ -27,9 +26,6 @@ public record CreateTransactionRequest(
                 message = "O valor deve possuir no máximo duas casas decimais"
         )
         BigDecimal amount,
-
-        @NotNull(message = "A data e hora da transação são obrigatórias")
-        LocalDateTime occurredAt,
 
         @NotBlank(message = "A descrição da transação é obrigatória")
         @Size(

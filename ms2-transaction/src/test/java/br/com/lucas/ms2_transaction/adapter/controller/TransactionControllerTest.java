@@ -60,7 +60,6 @@ class TransactionControllerTest {
                 new CreateTransactionRequest(
                         TransactionType.DEPOSIT,
                         new BigDecimal("100.00"),
-                        occurredAt,
                         "Depósito mensal",
                         null,
                         null
