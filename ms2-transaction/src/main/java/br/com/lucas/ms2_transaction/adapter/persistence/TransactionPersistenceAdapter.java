@@ -50,6 +50,25 @@ public class TransactionPersistenceAdapter implements TransactionRepositoryPort 
     }
 
     @Override
+    public List<Transaction> findAllByOwnerUserIdAndFilters(
+            Long ownerUserId,
+            TransactionType type,
+            LocalDateTime start,
+            LocalDateTime end
+    ) {
+        return springDataTransactionRepository
+                .findAllByOwnerUserIdAndFilters(
+                        ownerUserId,
+                        type,
+                        start,
+                        end
+                )
+                .stream()
+                .map(transactionPersistenceMapper::toDomain)
+                .toList();
+    }
+
+    @Override
     public BigDecimal sumApprovedOutgoingByOwnerUserIdAndDate(
             Long ownerUserId,
             LocalDate date

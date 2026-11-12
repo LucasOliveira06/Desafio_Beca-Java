@@ -10,16 +10,21 @@ import br.com.lucas.ms2_transaction.domain.model.Transaction;
 import br.com.lucas.ms2_transaction.domain.model.TransactionType;
 import br.com.lucas.ms2_transaction.application.exception.TransactionNotFoundException;
 import br.com.lucas.ms2_transaction.application.port.in.FindTransactionByIdUseCase;
+import br.com.lucas.ms2_transaction.application.exception.InvalidDateRangeException;
+import br.com.lucas.ms2_transaction.application.port.in.ListTransactionsUseCase;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.util.List;
 
 @Service
 public class TransactionService implements
         CreateTransactionUseCase,
-        FindTransactionByIdUseCase {
+        FindTransactionByIdUseCase,
+        ListTransactionsUseCase {
 
     private final TransactionRepositoryPort transactionRepositoryPort;
     private final AccountBalancePort accountBalancePort;
@@ -154,5 +159,43 @@ public class TransactionService implements
         } catch (AccountBalanceUnavailableException rollbackException) {
             originalException.addSuppressed(rollbackException);
         }
+    }
+
+    @Override
+    public List<Transaction> findAll(
+            Long ownerUserId,
+            TransactionType type,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+        LocalDate effectiveStartDate =
+                startDate != null
+                        ? startDate
+                        : LocalDate.of(1970, 1, 1);
+
+        LocalDate effectiveEndDate =
+                endDate != null
+                        ? endDate
+                        : LocalDate.now(clock);
+
+        if (effectiveStartDate.isAfter(effectiveEndDate)) {
+            throw new InvalidDateRangeException();
+        }
+
+        LocalDateTime start =
+                effectiveStartDate.atStartOfDay();
+
+        LocalDateTime end =
+                effectiveEndDate
+                        .plusDays(1)
+                        .atStartOfDay();
+
+        return transactionRepositoryPort
+                .findAllByOwnerUserIdAndFilters(
+                        ownerUserId,
+                        type,
+                        start,
+                        end
+                );
     }
 }

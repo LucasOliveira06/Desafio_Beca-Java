@@ -2,6 +2,7 @@ package br.com.lucas.ms2_transaction.adapter.exception;
 
 import br.com.lucas.ms2_transaction.application.exception.TransactionNotFoundException;
 import br.com.lucas.ms2_transaction.domain.exception.InvalidTransactionException;
+import br.com.lucas.ms2_transaction.application.exception.InvalidDateRangeException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -29,6 +30,20 @@ public class GlobalExceptionHandler
     @ExceptionHandler(InvalidTransactionException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidTransaction(
             InvalidTransactionException exception
+    ) {
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                exception.getMessage()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(response);
+    }
+
+    @ExceptionHandler(InvalidDateRangeException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidDateRange(
+            InvalidDateRangeException exception
     ) {
         ApiErrorResponse response = new ApiErrorResponse(
                 HttpStatus.BAD_REQUEST.value(),

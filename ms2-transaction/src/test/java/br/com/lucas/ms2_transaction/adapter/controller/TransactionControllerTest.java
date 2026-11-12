@@ -9,6 +9,7 @@ import br.com.lucas.ms2_transaction.domain.model.Transaction;
 import br.com.lucas.ms2_transaction.domain.model.TransactionStatus;
 import br.com.lucas.ms2_transaction.domain.model.TransactionType;
 import br.com.lucas.ms2_transaction.application.port.in.FindTransactionByIdUseCase;
+import br.com.lucas.ms2_transaction.application.port.in.ListTransactionsUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +22,8 @@ import org.springframework.http.ResponseEntity;
 import java.math.BigDecimal;
 import java.security.Principal;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -37,6 +40,9 @@ class TransactionControllerTest {
     @Mock
     private FindTransactionByIdUseCase findTransactionByIdUseCase;
 
+    @Mock
+    private ListTransactionsUseCase listTransactionsUseCase;
+
     private TransactionController transactionController;
 
     @BeforeEach
@@ -47,6 +53,7 @@ class TransactionControllerTest {
         transactionController = new TransactionController(
                 createTransactionUseCase,
                 findTransactionByIdUseCase,
+                listTransactionsUseCase,
                 mapper
         );
     }
@@ -143,5 +150,54 @@ class TransactionControllerTest {
 
         verify(findTransactionByIdUseCase)
                 .findById(7L, 12L);
+    }
+
+    @Test
+    void deveListarTransacoesDoUsuarioAutenticadoComFiltros() {
+        LocalDate startDate = LocalDate.of(2026, 11, 1);
+        LocalDate endDate = LocalDate.of(2026, 11, 30);
+
+        Transaction transaction = new Transaction(
+                8L,
+                TransactionType.DEPOSIT,
+                new BigDecimal("150.00"),
+                LocalDateTime.of(2026, 11, 12, 10, 0),
+                "Depósito de teste",
+                null,
+                12L,
+                null
+        );
+
+        transaction.approve();
+
+        when(listTransactionsUseCase.findAll(
+                12L,
+                TransactionType.DEPOSIT,
+                startDate,
+                endDate
+        )).thenReturn(List.of(transaction));
+
+        Principal principal = () -> "12";
+
+        ResponseEntity<List<TransactionResponse>> response =
+                transactionController.findAll(
+                        TransactionType.DEPOSIT,
+                        startDate,
+                        endDate,
+                        principal
+                );
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(1, response.getBody().size());
+        assertEquals(8L, response.getBody().getFirst().id());
+        assertEquals(12L, response.getBody().getFirst().ownerUserId());
+
+        verify(listTransactionsUseCase).findAll(
+                12L,
+                TransactionType.DEPOSIT,
+                startDate,
+                endDate
+        );
     }
 }

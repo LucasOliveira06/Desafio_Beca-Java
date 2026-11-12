@@ -9,6 +9,7 @@ import br.com.lucas.ms2_transaction.domain.model.Transaction;
 import br.com.lucas.ms2_transaction.domain.model.TransactionStatus;
 import br.com.lucas.ms2_transaction.domain.model.TransactionType;
 import br.com.lucas.ms2_transaction.application.exception.TransactionNotFoundException;
+import br.com.lucas.ms2_transaction.application.exception.InvalidDateRangeException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
@@ -20,6 +21,7 @@ import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -215,6 +217,78 @@ class TransactionServiceTest {
         );
     }
 
+    @Test
+    void deveListarTransacoesComFiltrosEPeriodoCompleto() {
+        Transaction transaction = new Transaction(
+                20L,
+                TransactionType.DEPOSIT,
+                new BigDecimal("100.00"),
+                LocalDateTime.of(2026, 11, 12, 10, 0),
+                "Depósito de teste",
+                null,
+                1L,
+                null
+        );
+
+        transaction.approve();
+        transactionRepository.transactionsToList = List.of(transaction);
+
+        List<Transaction> result = transactionService.findAll(
+                1L,
+                TransactionType.DEPOSIT,
+                LocalDate.of(2026, 11, 1),
+                LocalDate.of(2026, 11, 30)
+        );
+
+        assertEquals(1, result.size());
+        assertEquals(20L, result.getFirst().getId());
+        assertEquals(1L, transactionRepository.listedOwnerUserId);
+        assertEquals(
+                TransactionType.DEPOSIT,
+                transactionRepository.listedType
+        );
+        assertEquals(
+                LocalDateTime.of(2026, 11, 1, 0, 0),
+                transactionRepository.listedStart
+        );
+        assertEquals(
+                LocalDateTime.of(2026, 12, 1, 0, 0),
+                transactionRepository.listedEnd
+        );
+    }
+
+    @Test
+    void deveUsarPeriodoPadraoQuandoDatasNaoForemInformadas() {
+        transactionService.findAll(
+                1L,
+                null,
+                null,
+                null
+        );
+
+        assertEquals(
+                LocalDateTime.of(1970, 1, 1, 0, 0),
+                transactionRepository.listedStart
+        );
+        assertEquals(
+                LocalDateTime.of(2026, 11, 13, 0, 0),
+                transactionRepository.listedEnd
+        );
+    }
+
+    @Test
+    void deveRejeitarPeriodoComDataInicialPosteriorADataFinal() {
+        assertThrows(
+                InvalidDateRangeException.class,
+                () -> transactionService.findAll(
+                        1L,
+                        null,
+                        LocalDate.of(2026, 11, 30),
+                        LocalDate.of(2026, 11, 1)
+                )
+        );
+    }
+
     private CreateTransactionCommand createCommand(
             TransactionType type,
             BigDecimal amount,
@@ -245,6 +319,11 @@ class TransactionServiceTest {
         private BigDecimal dailyTotal = BigDecimal.ZERO;
         private Transaction transactionToFind;
         private LocalDate queriedDate;
+        private List<Transaction> transactionsToList = List.of();
+        private Long listedOwnerUserId;
+        private TransactionType listedType;
+        private LocalDateTime listedStart;
+        private LocalDateTime listedEnd;
 
         @Override
         public Transaction save(Transaction transaction) {
@@ -272,6 +351,21 @@ class TransactionServiceTest {
             }
 
             return Optional.empty();
+        }
+
+        @Override
+        public List<Transaction> findAllByOwnerUserIdAndFilters(
+                Long ownerUserId,
+                TransactionType type,
+                LocalDateTime start,
+                LocalDateTime end
+        ) {
+            listedOwnerUserId = ownerUserId;
+            listedType = type;
+            listedStart = start;
+            listedEnd = end;
+
+            return transactionsToList;
         }
 
         @Override
