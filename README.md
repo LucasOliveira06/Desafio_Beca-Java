@@ -1,110 +1,129 @@
 # Desafio Beca Java — API de Gestão Financeira
 
-Projeto desenvolvido para o Desafio Beca Java 2026, utilizando Java, Spring Boot e arquitetura hexagonal.
+Projeto do Desafio Beca Java 2026 composto por dois microsserviços Spring Boot, bancos PostgreSQL independentes e arquitetura hexagonal.
 
-Este repositório contém o **MS1 — User Service**, responsável pelo gerenciamento e autenticação de usuários. O MS2, voltado às transações financeiras, será desenvolvido em uma etapa separada.
+- **MS1 — User Service:** cadastro, autenticação e importação de usuários.
+- **MS2 — Transaction Service:** transações, saldo, consultas, análise de despesas, conversão de moedas e relatório CSV.
 
 ## Tecnologias
 
 - Java 21 e Spring Boot 4.1.2
-- Spring Web, Spring Data JPA e Spring Security
-- Bean Validation e BCrypt
+- Spring Web MVC, Spring Data JPA, Spring Security e Bean Validation
 - PostgreSQL 16 e Flyway
 - Maven, JUnit 5, Mockito e JaCoCo
 - Swagger / OpenAPI
 - Docker e Docker Compose
+- MockAPI para saldos e limites
+- BrasilAPI para cotações de USD e EUR
 
 ## Funcionalidades
 
-- Cadastro, listagem, consulta, atualização e exclusão de usuários
-- Normalização e unicidade do e-mail, com tratamento de duplicidade
-- Senhas protegidas por BCrypt e autenticação HTTP Basic
-- Respostas sem exposição da senha ou do hash
-- Atualização e exclusão permitidas apenas ao proprietário da conta
-- Importação parcial de usuários por CSV, com relatório de erros por linha
-- Validação de dados e tratamento centralizado de erros HTTP
-- Migrações do banco, documentação Swagger e testes automatizados
+### MS1 — Usuários
+
+- CRUD de usuários com proteção da senha por BCrypt
+- Autenticação HTTP Basic
+- Acesso restrito aos dados do próprio usuário
+- Normalização e unicidade do e-mail
+- Importação parcial por CSV com erros por linha e campo
+- Respostas HTTP padronizadas
+
+### MS2 — Transações
+
+- Criação de depósitos, saques, transferências e compras
+- Aprovação ou rejeição conforme saldo, limite por operação e limite diário
+- Atualização do saldo na MockAPI
+- Autenticação das credenciais pelo MS1
+- Consulta por ID e listagem com filtros, sempre limitadas ao usuário autenticado
+- Consulta de saldo e limites
+- Conversão de valores para USD e EUR pela BrasilAPI
+- Análise de despesas por categoria, dia e mês
+- Exportação de transações em CSV
+- Respostas padronizadas para validação e erros HTTP
 
 ## Arquitetura
 
-O MS1 segue uma arquitetura hexagonal simples (**Ports and Adapters**), separando as regras da aplicação das tecnologias externas.
+Os dois microsserviços seguem uma arquitetura hexagonal simples:
 
 ```text
-ms1-user/
-└── src/main/java/br/com/lucas/ms1_user/
-    ├── domain/
-    │   ├── model/             # Usuário e linha do CSV
-    │   └── exception/         # Exceções de negócio
-    ├── application/
-    │   ├── dto/               # Resultado da importação
-    │   ├── port/in/           # Casos de uso
-    │   ├── port/out/          # Interfaces de saída
-    │   ├── service/           # Regras de negócio
-    │   └── validation/        # Validação dos usuários
-    └── adapter/
-        ├── controller/        # Endpoints e DTOs HTTP
-        ├── csv/               # Leitura do CSV
-        ├── exception/         # Tratamento de erros
-        ├── persistence/       # JPA e PostgreSQL
-        └── security/          # HTTP Basic e BCrypt
+domain/                  regras e modelos de domínio
+application/
+├── port/in/             casos de uso oferecidos pela aplicação
+├── port/out/            contratos para serviços externos e persistência
+├── service/             regras de negócio
+└── dto/                 dados usados entre as camadas
+adapter/
+├── controller/          endpoints HTTP
+├── persistence/         JPA e PostgreSQL
+├── client/              integrações externas
+├── exception/           tratamento de erros
+└── security/            autenticação e autorização
 ```
 
-O fluxo principal é: **requisição HTTP → controller → caso de uso → serviço → porta de saída → adaptador JPA → PostgreSQL**.
+O MS1 e o MS2 possuem bancos e migrações Flyway próprios. O Hibernate utiliza `ddl-auto=validate`.
 
-As alterações do banco são versionadas pelo Flyway em `ms1-user/src/main/resources/db/migration/` (V1, V2 e V3). O Hibernate utiliza `ddl-auto=validate`.
+## Configuração
 
-## Configuração e execução
+Pré-requisitos: Git, Docker Desktop com Docker Compose e Java 21 para executar testes localmente.
 
-**Pré-requisitos:** Git e Docker Desktop com Docker Compose. Para executar os testes localmente, utilize Java 21 e o Maven Wrapper incluído no projeto.
-
-Na raiz do repositório, copie o arquivo de exemplo e configure as variáveis do ambiente:
+Na raiz do repositório, crie o arquivo local de variáveis:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-O `.env` contém as configurações dos bancos (`USER_DB_*` e `TRANSACTION_DB_*`). **Não envie esse arquivo ao GitHub.**
+Preencha no `.env` as variáveis `USER_DB_*` e `TRANSACTION_DB_*`. Esse arquivo não deve ser enviado ao Git.
 
-Para construir e iniciar a API e seu PostgreSQL:
+Configurações opcionais do MS2:
+
+| Variável | Finalidade | Valor padrão |
+|---|---|---|
+| `MS1_BASE_URL` | Endereço do MS1 | `http://localhost:8081` |
+| `MOCK_API_ACCOUNT_URL` | Recurso de contas da MockAPI | URL configurada no projeto |
+| `BRASIL_API_BASE_URL` | Endereço da BrasilAPI | `https://brasilapi.com.br` |
+| `HTTP_CLIENT_CONNECT_TIMEOUT` | Timeout de conexão | `3s` |
+| `HTTP_CLIENT_READ_TIMEOUT` | Timeout de leitura | `5s` |
+
+## Execução com Docker
+
+Na raiz do repositório:
 
 ```powershell
-docker compose up --build -d ms1-user
-```
-
-Para verificar os containers e acompanhar os logs:
-
-```powershell
+docker compose config --quiet
+docker compose up --build -d
 docker compose ps
-docker compose logs -f ms1-user
 ```
-
-Com a aplicação iniciada:
 
 | Recurso | Endereço |
 |---|---|
-| API de usuários | http://localhost:8081/users |
-| Swagger UI | http://localhost:8081/swagger-ui/index.html |
-| OpenAPI JSON | http://localhost:8081/v3/api-docs |
-| Health check | http://localhost:8081/actuator/health |
+| MS1 | http://localhost:8081 |
+| Swagger do MS1 | http://localhost:8081/swagger-ui/index.html |
+| Health do MS1 | http://localhost:8081/actuator/health |
+| MS2 | http://localhost:8082 |
+| Swagger do MS2 | http://localhost:8082/swagger-ui/index.html |
+| Health do MS2 | http://localhost:8082/actuator/health |
 
-O PostgreSQL do MS1 utiliza a porta interna `5432`. No ambiente local, a porta exposta é definida por `USER_DB_PORT` (por exemplo, `5434`). Os dados são persistidos em um volume Docker.
+Para parar os serviços sem apagar os volumes:
 
-Para parar os serviços sem remover os volumes, utilize `docker compose down`. Evite `docker compose down -v` se quiser preservar os dados cadastrados.
+```powershell
+docker compose down
+```
 
-## Endpoints e autenticação
+Não use `docker compose down -v` se quiser preservar os dados dos bancos.
+
+## Endpoints do MS1
 
 | Método | Endpoint | Descrição | Autenticação |
 |---|---|---|---|
 | POST | `/users` | Cadastrar usuário | Pública |
-| GET | `/users` | Listar usuários | HTTP Basic |
-| GET | `/users/{id}` | Consultar por ID | HTTP Basic |
+| GET | `/users` | Consultar o próprio usuário | HTTP Basic |
+| GET | `/users/{id}` | Consultar por ID | HTTP Basic + proprietário |
 | PUT | `/users/{id}` | Atualizar a própria conta | HTTP Basic + proprietário |
 | DELETE | `/users/{id}` | Excluir a própria conta | HTTP Basic + proprietário |
 | POST | `/users/import` | Importar usuários por CSV | HTTP Basic |
 
-No HTTP Basic, o **usuário é o e-mail cadastrado** e a **senha é a informada no cadastro**. No Swagger, o botão `Authorize` permite informar essas credenciais.
+No HTTP Basic do MS1, o usuário é o e-mail cadastrado e a senha é a informada no cadastro.
 
-Exemplo de cadastro (`POST /users`):
+Exemplo de cadastro:
 
 ```json
 {
@@ -114,85 +133,109 @@ Exemplo de cadastro (`POST /users`):
 }
 ```
 
-O cadastro retorna **201 Created**, com o header `Location` apontando para `/users/{id}`. A resposta contém ID, nome e e-mail, sem a senha.
+## Importação de usuários por CSV
 
-## Importação CSV
+O endpoint `POST /users/import` recebe `multipart/form-data` no campo `file`.
 
-O endpoint `POST /users/import` recebe um arquivo `multipart/form-data` no campo **`file`**, com o cabeçalho exato `name,email,password`.
+O cabeçalho aceita letras maiúsculas ou minúsculas, espaços ao redor dos nomes e os separadores vírgula ou ponto e vírgula. As colunas são:
 
 ```csv
-name,email,password
-Ana Silva,ana@example.com,SenhaAna123
-Pedro Souza,pedro@example.com,123
-Maria Oliveira,maria@example.com,SenhaMaria123
+name;email;password
+Ana Silva;ana.silva@example.com;SenhaAna123
 ```
 
-A importação é **parcial**: linhas válidas são cadastradas, enquanto as inválidas são ignoradas e registradas com número da linha e motivo. Uma falha em uma linha não desfaz os cadastros válidos já realizados.
+O arquivo exigido como exemplo está em [`examples/users-import-example.csv`](examples/users-import-example.csv).
 
-Exemplo de resposta (`200 OK`):
+Regras principais:
+
+- arquivo de até 1 MB;
+- no máximo 1.000 linhas de dados não vazias;
+- importação parcial, preservando as linhas válidas;
+- erros com linha, campo e motivo;
+- senha com no mínimo oito caracteres.
+
+## Endpoints do MS2
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| POST | `/transactions` | Criar uma transação |
+| GET | `/transactions` | Listar transações com filtros opcionais |
+| GET | `/transactions/{id}` | Consultar uma transação por ID |
+| GET | `/balance` | Consultar saldo e limites |
+| GET | `/expenses/analysis` | Analisar despesas por período |
+| GET | `/transactions/report` | Baixar relatório CSV |
+
+Todos os endpoints do MS2 exigem HTTP Basic. O MS2 envia as credenciais ao MS1 e usa o ID retornado como proprietário das operações.
+
+Filtros disponíveis em `GET /transactions`:
+
+- `type`: `DEPOSIT`, `WITHDRAWAL`, `TRANSFER` ou `PURCHASE`;
+- `startDate`: data inicial em `yyyy-MM-dd`;
+- `endDate`: data final em `yyyy-MM-dd`.
+
+Exemplo de criação:
 
 ```json
 {
-  "totalImported": 2,
+  "type": "PURCHASE",
+  "amount": 100.00,
+  "description": "Compra de mercado",
+  "category": "ALIMENTACAO"
+}
+```
+
+O horário da transação é definido pelo servidor no fuso `America/Sao_Paulo`.
+
+## Conversão de moedas
+
+As consultas de transações retornam conversões para USD e EUR. A aplicação consulta a BrasilAPI usando a data da transação.
+
+Quando não há cotação nessa data, como em fins de semana, feriados ou no dia atual, o MS2 procura a última cotação disponível nos sete dias anteriores. O campo `rateDate` sempre informa a data real da cotação utilizada e pode ser anterior à data da transação.
+
+Se nenhuma cotação for encontrada, a consulta continua funcionando com `available: false` e os valores da conversão nulos.
+
+## Tratamento de erros
+
+As APIs utilizam respostas padronizadas. Erros de Bean Validation no MS2 incluem campo e mensagem:
+
+```json
+{
+  "status": 400,
+  "message": "Dados inválidos",
   "errors": [
     {
-      "line": 3,
-      "reason": "A senha deve ter no mínimo 8 caracteres"
+      "field": "amount",
+      "message": "O valor da transação deve ser maior que zero"
     }
   ]
 }
 ```
 
-Regras de importação:
-
-- Máximo de **1 MB por arquivo** e **1.000 linhas de dados não vazias** (sem contar o cabeçalho).
-- Linhas com formato incorreto, dados inválidos ou e-mails duplicados são registradas no relatório.
-- Cabeçalho inválido e limite de linhas excedido provocam rejeição do arquivo com HTTP `400`.
-- Upload acima do limite do Spring pode retornar HTTP `413`.
-
-## Tratamento de erros
-
-A API possui um `GlobalExceptionHandler` para padronizar as respostas.
-
 | Status | Situação |
 |---|---|
-| `400 Bad Request` | Dados inválidos ou arquivo CSV incorreto |
-| `401 Unauthorized` | Autenticação ausente ou inválida |
-| `403 Forbidden` | Tentativa de alterar ou excluir conta de outra pessoa |
-| `404 Not Found` | Usuário não encontrado |
-| `409 Conflict` | E-mail duplicado ou violação de integridade |
-| `413 Payload Too Large` | Upload acima do limite permitido |
-| `500 Internal Server Error` | Falha inesperada, sem expor detalhes internos |
+| `400 Bad Request` | Dados ou período inválidos |
+| `401 Unauthorized` | Credenciais inválidas ou ausentes |
+| `403 Forbidden` | Operação não autorizada |
+| `404 Not Found` | Recurso não encontrado |
+| `409 Conflict` | Duplicidade ou conflito de integridade |
+| `413 Payload Too Large` | CSV acima do limite |
+| `503 Service Unavailable` | Dependência externa indisponível |
 
 ## Testes e cobertura
 
-Os testes utilizam **JUnit 5** e **Mockito** para verificar cadastro, atualização, validação, leitura e importação parcial do CSV, persistência, controller, autorização e tratamento de erros.
-
-Para executar a suíte completa no Windows, entre na pasta `ms1-user`:
+Para testar cada microsserviço:
 
 ```powershell
 cd ms1-user
-```
-
-Como o Maven executado no terminal não lê automaticamente o `.env`, carregue as variáveis na sessão do PowerShell:
-
-```powershell
-Get-Content ..\.env | ForEach-Object {
-    if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
-        [Environment]::SetEnvironmentVariable($matches[1], $matches[2].Trim(), "Process")
-    }
-}
-```
-
-Execute os testes e gere o relatório JaCoCo:
-
-```powershell
 .\mvnw.cmd clean verify
-Invoke-Item .\target\site\jacoco\index.html
+
+cd ..\ms2-transaction
+.\mvnw.cmd clean verify
 ```
 
-## Status do projeto
+Os relatórios JaCoCo são gerados em `target/site/jacoco/index.html` dentro de cada microsserviço.
 
-**MS1 — Gerenciamento de Usuários:** CRUD, segurança, importação parcial de CSV, Flyway, Swagger, Docker e testes implementados.
+## Status
 
-**MS2 — Transações Financeiras:** próxima etapa do desafio.
+- **MS1:** CRUD, segurança, importação CSV, Flyway, Swagger, Docker e testes implementados.
+- **MS2:** transações, segurança integrada ao MS1, saldos, limites, BrasilAPI, análises, relatório CSV, Flyway, Swagger, Docker e testes implementados.
